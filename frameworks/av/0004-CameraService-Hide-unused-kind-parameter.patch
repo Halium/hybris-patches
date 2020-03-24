@@ -1,0 +1,26 @@
+From 42d8eb888ccb55f4ef861710c5376bc65835e701 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Tue, 24 Mar 2020 22:29:00 +0100
+Subject: [PATCH] CameraService: Hide unused 'kind' parameter
+
+Change-Id: Ib5f79040f9623f21b6573c378893dda0ea3b8fcc
+---
+ services/camera/libcameraservice/CameraService.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
+index d0c55c0..85c0a7b 100644
+--- a/services/camera/libcameraservice/CameraService.cpp
++++ b/services/camera/libcameraservice/CameraService.cpp
+@@ -2047,7 +2047,7 @@ void CameraService::increaseSoundRef() {
+     mSoundRef++;
+ }
+ 
+-void CameraService::loadSoundLocked(sound_kind kind) {
++void CameraService::loadSoundLocked(sound_kind /* kind */ ) {
+     ATRACE_CALL();
+ 
+     LOG1("CameraService::loadSoundLocked ref=%d", mSoundRef);
+-- 
+2.25.1
+
