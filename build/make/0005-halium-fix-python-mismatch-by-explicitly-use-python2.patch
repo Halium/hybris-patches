@@ -1,0 +1,286 @@
+From 65db641c3b21815feeab3d6ae1f63dafe9b94c7c Mon Sep 17 00:00:00 2001
+From: Vince1171 <franchomme.vincent@gmail.com>
+Date: Tue, 2 Feb 2021 14:16:33 +0100
+Subject: [PATCH] (halium) fix python mismatch by explicitly use python2
+
+Change-Id: I9c0fecd55d8f91a42174a54f968244d6aedbdca7
+---
+ tools/auto_gen_test_config.py                  | 2 +-
+ tools/auto_gen_test_config_test.py             | 2 +-
+ tools/check_link_type.py                       | 2 +-
+ tools/check_radio_versions.py                  | 2 +-
+ tools/checkowners.py                           | 2 +-
+ tools/compare_fileslist.py                     | 2 +-
+ tools/event_log_tags.py                        | 1 +
+ tools/fat16copy.py                             | 2 +-
+ tools/fileslist_util.py                        | 2 +-
+ tools/filter-product-graph.py                  | 2 +-
+ tools/findleaves.py                            | 2 +-
+ tools/fs_config/fs_config_generator.py         | 2 +-
+ tools/fs_config/test_fs_config_generator.py    | 2 +-
+ tools/generate-enforce-rro-android-manifest.py | 2 +-
+ tools/generate-notice-files.py                 | 2 +-
+ tools/java-event-log-tags.py                   | 2 +-
+ tools/java-layers.py                           | 2 +-
+ tools/merge-event-log-tags.py                  | 2 +-
+ tools/normalize_path.py                        | 2 +-
+ tools/parsedeps.py                             | 2 +-
+ tools/post_process_props.py                    | 2 +-
+ tools/product_debug.py                         | 2 +-
+ tools/soong_to_convert.py                      | 2 +-
+ tools/uuidgen.py                               | 2 +-
+ tools/warn.py                                  | 2 +-
+ 25 files changed, 25 insertions(+), 24 deletions(-)
+
+diff --git a/tools/auto_gen_test_config.py b/tools/auto_gen_test_config.py
+index c7c5bdc61..c1a585760 100755
+--- a/tools/auto_gen_test_config.py
++++ b/tools/auto_gen_test_config.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2017 The Android Open Source Project
+ #
+diff --git a/tools/auto_gen_test_config_test.py b/tools/auto_gen_test_config_test.py
+index e68c27fdd..e5cd767e6 100644
+--- a/tools/auto_gen_test_config_test.py
++++ b/tools/auto_gen_test_config_test.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright 2017, The Android Open Source Project
+ #
+diff --git a/tools/check_link_type.py b/tools/check_link_type.py
+index 40754adc6..b3306ac67 100755
+--- a/tools/check_link_type.py
++++ b/tools/check_link_type.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2016 The Android Open Source Project
+ #
+diff --git a/tools/check_radio_versions.py b/tools/check_radio_versions.py
+index ebe621f46..37d7273e5 100755
+--- a/tools/check_radio_versions.py
++++ b/tools/check_radio_versions.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2012 The Android Open Source Project
+ #
+diff --git a/tools/checkowners.py b/tools/checkowners.py
+index 1190d30f2..b0ff8ee0f 100755
+--- a/tools/checkowners.py
++++ b/tools/checkowners.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python
++#!/usr/bin/python2
+ 
+ """Parse and check syntax errors of a given OWNERS file."""
+ 
+diff --git a/tools/compare_fileslist.py b/tools/compare_fileslist.py
+index 1f507d864..70498f712 100755
+--- a/tools/compare_fileslist.py
++++ b/tools/compare_fileslist.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+diff --git a/tools/event_log_tags.py b/tools/event_log_tags.py
+index 645839ec2..0faff099c 100644
+--- a/tools/event_log_tags.py
++++ b/tools/event_log_tags.py
+@@ -1,3 +1,4 @@
++#!/usr/bin/env python2
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+diff --git a/tools/fat16copy.py b/tools/fat16copy.py
+index c20930a47..181fc6ccd 100755
+--- a/tools/fat16copy.py
++++ b/tools/fat16copy.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright 2016 The Android Open Source Project
+ #
+diff --git a/tools/fileslist_util.py b/tools/fileslist_util.py
+index ff40d51a0..4b01c7ecd 100755
+--- a/tools/fileslist_util.py
++++ b/tools/fileslist_util.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2016 The Android Open Source Project
+ #
+diff --git a/tools/filter-product-graph.py b/tools/filter-product-graph.py
+index b3a5b42c3..88f1d3ce2 100755
+--- a/tools/filter-product-graph.py
++++ b/tools/filter-product-graph.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ # vim: ts=2 sw=2 nocindent
+ 
+ import re
+diff --git a/tools/findleaves.py b/tools/findleaves.py
+index f152a87e7..8d6a11a1c 100755
+--- a/tools/findleaves.py
++++ b/tools/findleaves.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+diff --git a/tools/fs_config/fs_config_generator.py b/tools/fs_config/fs_config_generator.py
+index 186c7641b..50cfe5967 100755
+--- a/tools/fs_config/fs_config_generator.py
++++ b/tools/fs_config/fs_config_generator.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ """Generates config files for Android file system properties.
+ 
+ This script is used for generating configuration files for configuring
+diff --git a/tools/fs_config/test_fs_config_generator.py b/tools/fs_config/test_fs_config_generator.py
+index a49058a81..8493eb01c 100755
+--- a/tools/fs_config/test_fs_config_generator.py
++++ b/tools/fs_config/test_fs_config_generator.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ """Unit test suite for the fs_config_genertor.py tool."""
+ 
+ import tempfile
+diff --git a/tools/generate-enforce-rro-android-manifest.py b/tools/generate-enforce-rro-android-manifest.py
+index 68331cfad..e0d0127a9 100755
+--- a/tools/generate-enforce-rro-android-manifest.py
++++ b/tools/generate-enforce-rro-android-manifest.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2017 The Android Open Source Project
+ #
+diff --git a/tools/generate-notice-files.py b/tools/generate-notice-files.py
+index b754174a9..ffb353544 100755
+--- a/tools/generate-notice-files.py
++++ b/tools/generate-notice-files.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2012 The Android Open Source Project
+ #
+diff --git a/tools/java-event-log-tags.py b/tools/java-event-log-tags.py
+index 37cd71220..275030e4e 100755
+--- a/tools/java-event-log-tags.py
++++ b/tools/java-event-log-tags.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+diff --git a/tools/java-layers.py b/tools/java-layers.py
+index b3aec2b1d..7b4315939 100755
+--- a/tools/java-layers.py
++++ b/tools/java-layers.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ 
+ import os
+ import re
+diff --git a/tools/merge-event-log-tags.py b/tools/merge-event-log-tags.py
+index 64bad3f81..c8f308fa0 100755
+--- a/tools/merge-event-log-tags.py
++++ b/tools/merge-event-log-tags.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+diff --git a/tools/normalize_path.py b/tools/normalize_path.py
+index 6c4d5486d..92915916f 100755
+--- a/tools/normalize_path.py
++++ b/tools/normalize_path.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2015 The Android Open Source Project
+ #
+diff --git a/tools/parsedeps.py b/tools/parsedeps.py
+index 32d8ad7d6..c07be00d2 100755
+--- a/tools/parsedeps.py
++++ b/tools/parsedeps.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ # vim: ts=2 sw=2
+ 
+ import optparse
+diff --git a/tools/post_process_props.py b/tools/post_process_props.py
+index 45a46caf3..0ec5b03a8 100755
+--- a/tools/post_process_props.py
++++ b/tools/post_process_props.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2009 The Android Open Source Project
+ #
+diff --git a/tools/product_debug.py b/tools/product_debug.py
+index ff2657c6d..0280ec153 100755
+--- a/tools/product_debug.py
++++ b/tools/product_debug.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2012 The Android Open Source Project
+ #
+diff --git a/tools/soong_to_convert.py b/tools/soong_to_convert.py
+index 083f6f78d..4e2a150b6 100755
+--- a/tools/soong_to_convert.py
++++ b/tools/soong_to_convert.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright (C) 2016 The Android Open Source Project
+ #
+diff --git a/tools/uuidgen.py b/tools/uuidgen.py
+index d3091a768..b5f37eb3b 100755
+--- a/tools/uuidgen.py
++++ b/tools/uuidgen.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python2
+ #
+ # Copyright 2018 The Android Open Source Project
+ #
+diff --git a/tools/warn.py b/tools/warn.py
+index 01398be55..0c5dd6b64 100755
+--- a/tools/warn.py
++++ b/tools/warn.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python
++#!/usr/bin/python2
+ # This file uses the following encoding: utf-8
+ 
+ """Grep warnings messages and output HTML tables or warning counts in CSV.
+-- 
+2.25.1
+
