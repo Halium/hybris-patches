@@ -1,0 +1,37 @@
+From 0e77710b7ab1f3352beca415f050d2a4debb56c8 Mon Sep 17 00:00:00 2001
+From: Christophe Chapuis <chris.chapuis@gmail.com>
+Date: Sun, 11 Apr 2021 13:16:58 +0000
+Subject: [PATCH] BoardConfigQcom.mk: restore support for some old boards
+
+Change-Id: I1d3a3f11a7c623115d14fa093195ed3816b25cf2
+---
+ config/BoardConfigQcom.mk | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/config/BoardConfigQcom.mk b/config/BoardConfigQcom.mk
+index d699edd..0a793f3 100644
+--- a/config/BoardConfigQcom.mk
++++ b/config/BoardConfigQcom.mk
+@@ -3,6 +3,7 @@ MSMNILE := msmnile #SM8150
+ MSMSTEPPE := sm6150
+ TRINKET := trinket #SM6125
+ 
++A_FAMILY := msm7x27a msm7x30 msm8660 msm8960
+ B_FAMILY := msm8226 msm8610 msm8974
+ B64_FAMILY := msm8992 msm8994
+ BR_FAMILY := msm8909 msm8916
+@@ -58,7 +59,10 @@ endif
+ # List of targets that use master side content protection
+ MASTER_SIDE_CP_TARGET_LIST := msm8996 $(UM_4_4_FAMILY) $(UM_4_9_FAMILY) $(UM_4_14_FAMILY)
+ 
+-ifneq ($(filter $(B_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++ifneq ($(filter $(A_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++    MSM_VIDC_TARGET_LIST := $(A_FAMILY)
++    QCOM_HARDWARE_VARIANT := msm8960
++else ifneq ($(filter $(B_FAMILY),$(TARGET_BOARD_PLATFORM)),)
+     MSM_VIDC_TARGET_LIST := $(B_FAMILY)
+     QCOM_HARDWARE_VARIANT := msm8974
+ else ifneq ($(filter $(B64_FAMILY),$(TARGET_BOARD_PLATFORM)),)
+-- 
+2.17.1
+
