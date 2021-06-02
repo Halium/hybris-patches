@@ -1,13 +1,13 @@
 From eac97d5bd6323f49408109d59f7aa7d2f7f40499 Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 9 Feb 2020 18:35:53 +0100
-Subject: [PATCH 3/5] (halium) add basic Halium build configuration based on
+Subject: [PATCH 4/5] (halium) add basic Halium build configuration based on
  embedded.mk
 
 Change-Id: I7ce0e771a5bdd0a94bd43af35bbfff3edc75dfd1
 ---
- target/product/halium.mk | 44 ++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 44 insertions(+)
+ target/product/halium.mk | 42 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 42 insertions(+)
  create mode 100644 target/product/halium.mk
 
 diff --git a/target/product/halium.mk b/target/product/halium.mk
@@ -15,7 +15,7 @@ new file mode 100644
 index 0000000..166bf05
 --- /dev/null
 +++ b/target/product/halium.mk
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,42 @@
 +# Required Android parts not included by embedded.mk
 +PRODUCT_PACKAGES += \
 +    android.system.net.netd@1.1-service.stub \
@@ -35,12 +35,10 @@ index 0000000..166bf05
 +
 +# Produce binaries needed on host
 +PRODUCT_PACKAGES += \
-+    BootSignature \
 +    fec \
 +    mke2fs \
 +    mkuserimg_mke2fs.sh \
-+    mkimage \
-+    VeritySigner
++    mkimage
 +
 +# Halium-specific packages
 +PRODUCT_PACKAGES += \
