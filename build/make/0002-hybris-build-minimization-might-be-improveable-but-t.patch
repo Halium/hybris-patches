@@ -932,7 +932,7 @@ index 97ec295f8..5f3ffd7ae 100644
  
  $(foreach mk,$(subdir_makefiles),$(info [$(call inc_and_print,subdir_makefiles_inc)/$(subdir_makefiles_total)] including $(mk) ...)$(eval include $(mk)))
  
-+ALL_MODULES := $(HYBRIS_TARGETS)
++ALL_MODULES := verity_signer boot_signer
 +ALL_LINK_TYPES := $(foreach r,$(ALL_MODULES),$(shell echo $(filter %:%:$(r),$(ALL_LINK_TYPES))))
 +
  ifneq (,$(PDK_FUSION_PLATFORM_ZIP)$(PDK_FUSION_PLATFORM_DIR))
