@@ -7,9 +7,9 @@ Subject: [PATCH 42/44] (hybris) invoke
 Needed to fix MediaTek nvram daemon startup issues, as Mer way of triggering late_start
 does not seem to work for it
 ---
- init/builtins.cpp | 5 +----
- rootdir/init.rc   | 5 +++--
- 2 files changed, 4 insertions(+), 6 deletions(-)
+ init/builtins.cpp |  5 +----
+ rootdir/init.rc   | 11 ++++++-----
+ 2 files changed, 7 insertions(+), 9 deletions(-)
 
 diff --git a/init/builtins.cpp b/init/builtins.cpp
 index 4e2bce3..707ab22 100644
@@ -41,6 +41,15 @@ diff --git a/rootdir/init.rc b/rootdir/init.rc
 index 812e498..7ab1d4a 100644
 --- a/rootdir/init.rc
 +++ b/rootdir/init.rc
+@@ -399,7 +399,7 @@ on post-fs-data
+     # Make sure we have the device encryption key.
+     #start vold
+     # hybris continue bootup properly
+-    setprop vold.decrypt trigger_restart_min_framework
++    setprop vold.decrypt trigger_restart_framework
+     installkey /data
+ 
+     # Start bootcharting as soon as possible after the data partition is
 @@ -695,8 +695,9 @@ on property:sys.init_log_level=*
      loglevel ${sys.init_log_level}
  
@@ -53,6 +62,17 @@ index 812e498..7ab1d4a 100644
  
  on charger
      trigger late-init
+@@ -719,8 +720,8 @@ on property:vold.decrypt=trigger_restart_min_framework
+ on property:vold.decrypt=trigger_restart_framework
+     class_start main
+     class_start late_start
+-    setprop service.bootanim.exit 0
+-    start bootanim
++    # setprop service.bootanim.exit 0
++    # start bootanim
+ 
+ on property:vold.decrypt=trigger_shutdown_framework
+     class_reset late_start
 -- 
 2.26.0
 
