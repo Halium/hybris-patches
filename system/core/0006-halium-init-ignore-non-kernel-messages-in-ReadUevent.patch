@@ -1,4 +1,4 @@
-From 7d094446c1bb707b8cd476158c9197daec542dca Mon Sep 17 00:00:00 2001
+From a7b5fa7924217e30c1aad96694feadabf05ac644 Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 19 Apr 2020 23:47:38 +0200
 Subject: [PATCH] (halium) init: ignore non-kernel messages in ReadUevent
@@ -15,7 +15,7 @@ Change-Id: Ib7e4521899035e2dc67efaf27fc1bea13659efb4
  1 file changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/init/uevent_listener.cpp b/init/uevent_listener.cpp
-index 26f7ed6a9..f63c1d6c9 100644
+index 62cd2be3a..6493c56c0 100644
 --- a/init/uevent_listener.cpp
 +++ b/init/uevent_listener.cpp
 @@ -99,7 +99,19 @@ bool UeventListener::ReadUevent(Uevent* uevent) const {
@@ -40,5 +40,5 @@ index 26f7ed6a9..f63c1d6c9 100644
          }
          return false;
 -- 
-2.28.0
+2.32.0
 

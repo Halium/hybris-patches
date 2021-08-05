@@ -1,17 +1,22 @@
-From 7967b452fb5d0d883cd459f5e33da841f6148806 Mon Sep 17 00:00:00 2001
+From 1571e850f924a491494f3cd154bc3f8c33f527f6 Mon Sep 17 00:00:00 2001
 From: Asriel Dreemurr <asriel.danctnix@gmail.com>
 Date: Sun, 18 Oct 2020 00:31:45 +0700
-Subject: [PATCH 1/4] (anbox) init: start inside LXC container without SELinux
+Subject: [PATCH] (anbox) init: start inside LXC container without SELinux
 
+amartinz: keep first stage init setup for recovery, otherwise
+recovery will not boot.
+
+Change-Id: I1d4181f07b662f513db621a66f78348295a3862a
+Signed-off-by: Alexander Martinz <alex@amartinz.at>
 ---
  init/Android.bp           |  2 ++
- init/first_stage_init.cpp | 31 ++++++++++++++++++++-----------
- init/init.cpp             | 14 +++++++++-----
- init/property_service.cpp | 24 +++++++++++++++---------
- init/service.cpp          | 10 ++++++----
+ init/first_stage_init.cpp | 47 ++++++++++++++++++++++++++++++---------
+ init/init.cpp             | 14 +++++++-----
+ init/property_service.cpp | 24 ++++++++++++--------
+ init/service.cpp          | 10 +++++----
  init/subcontext.cpp       |  5 +++--
- init/util.cpp             | 18 +++++++++++-------
- 7 files changed, 66 insertions(+), 38 deletions(-)
+ init/util.cpp             | 18 +++++++++------
+ 7 files changed, 82 insertions(+), 38 deletions(-)
 
 diff --git a/init/Android.bp b/init/Android.bp
 index 377a3740c..9dda6897f 100644
@@ -34,26 +39,34 @@ index 377a3740c..9dda6897f 100644
      ],
      static_libs: [
 diff --git a/init/first_stage_init.cpp b/init/first_stage_init.cpp
-index 2b899408a..b148fb231 100644
+index 2b899408a..6b86e12f7 100644
 --- a/init/first_stage_init.cpp
 +++ b/init/first_stage_init.cpp
-@@ -117,19 +117,22 @@ int FirstStageMain(int argc, char** argv) {
+@@ -117,19 +117,31 @@ int FirstStageMain(int argc, char** argv) {
      CHECKCALL(setenv("PATH", _PATH_DEFPATH, 1));
      // Get the basic filesystem setup we need put together in the initramdisk
      // on / and then we'll let the rc file figure out the rest.
 -    CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
 -    CHECKCALL(mkdir("/dev/pts", 0755));
+-    CHECKCALL(mkdir("/dev/socket", 0755));
+-    CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
++
++    // We need to disable certain things for Anbox while the recovery needs it.
++    bool is_recovery = IsRecoveryMode();
 +
 +    // Disabled for Anbox, mounted by host system instead
-+    //CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
-+    //CHECKCALL(mkdir("/dev/pts", 0755));
-     CHECKCALL(mkdir("/dev/socket", 0755));
--    CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
-+    //CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
++    if (!is_recovery) {
++        mkdir("/dev/socket", 0755);
++    } else {
++        CHECKCALL(mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755"));
++        CHECKCALL(mkdir("/dev/pts", 0755));
++        CHECKCALL(mkdir("/dev/socket", 0755));
++        CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
  #define MAKE_STR(x) __STRING(x)
 -    CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
-+    //CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
++        CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
  #undef MAKE_STR
++    }
      // Don't expose the raw commandline to unprivileged processes.
      CHECKCALL(chmod("/proc/cmdline", 0440));
      gid_t groups[] = {AID_READPROC};
@@ -61,46 +74,52 @@ index 2b899408a..b148fb231 100644
 -    CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
 -    CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
 +    // Disabled for Anbox
-+    //CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
-+    //CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
++    if (is_recovery) {
++        CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
++        CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
++    }
  
      CHECKCALL(mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11)));
  
-@@ -141,8 +144,11 @@ int FirstStageMain(int argc, char** argv) {
+@@ -141,8 +153,13 @@ int FirstStageMain(int argc, char** argv) {
      CHECKCALL(mknod("/dev/urandom", S_IFCHR | 0666, makedev(1, 9)));
  
      // This is needed for log wrapper, which gets called before ueventd runs.
 -    CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
 -    CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
 +    // Can be created by LXC on Anbox
-+    //CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
-+    //CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
++    if (is_recovery) {
++        CHECKCALL(mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2)));
++        CHECKCALL(mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3)));
++    }
 +    mknod("/dev/ptmx", S_IFCHR | 0666, makedev(5, 2));
 +    mknod("/dev/null", S_IFCHR | 0666, makedev(1, 3));
  
      // These below mounts are done in first stage init so that first stage mount can mount
      // subdirectories of /mnt/{vendor,product}/.  Other mounts, not required by first stage mount,
-@@ -215,9 +221,10 @@ int FirstStageMain(int argc, char** argv) {
+@@ -215,7 +232,8 @@ int FirstStageMain(int argc, char** argv) {
          }
      }
  
 -    if (!DoFirstStageMount()) {
 +    // Disabled for Anbox
-+    /*if (!DoFirstStageMount()) {
++    if (is_recovery && !DoFirstStageMount()) {
          LOG(FATAL) << "Failed to mount required partitions early ...";
--    }
-+    }*/
+     }
  
-     struct stat new_root_info;
-     if (stat("/", &new_root_info) != 0) {
-@@ -236,7 +243,9 @@ int FirstStageMain(int argc, char** argv) {
+@@ -236,7 +254,14 @@ int FirstStageMain(int argc, char** argv) {
      setenv("INIT_STARTED_AT", std::to_string(start_ms).c_str(), 1);
  
      const char* path = "/system/bin/init";
 -    const char* args[] = {path, "selinux_setup", nullptr};
 +    // Anbox: skip selinux_setup
-+    //const char* args[] = {path, "selinux_setup", nullptr};
-+    const char* args[] = {path, "second_stage", nullptr};
++    const char* next_stage;
++    if (is_recovery) {
++        next_stage = "selinux_setup";
++    } else {
++        next_stage = "second_stage";
++    }
++    const char* args[] = {path, next_stage, nullptr};
      execv(path, const_cast<char**>(args));
  
      // execv() only returns if an error happened, in which case we
@@ -326,5 +345,5 @@ index 63d2d4442..516221ca4 100644
      if (ret) {
          errno = savederrno;
 -- 
-2.28.0
+2.32.0
 
