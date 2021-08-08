@@ -1,0 +1,80 @@
+From 84a5856fe86101ecf809024e04e4ef9afb9e6e50 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sun, 8 Aug 2021 18:32:18 +0200
+Subject: [PATCH] hal/msm8974: Use 64bit types to request mute & volume changes
+
+64bit kernels fail to apply mute & volume requests from userspace
+when the sizes don't match, since they can't be parsed.
+Turn them into 64bit types instead.
+
+Change-Id: I934f6a77147a56b43450d595e93e1f3cddea533f
+---
+ hal/Android.mk         |  2 +-
+ hal/msm8974/platform.c | 10 +++++-----
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/hal/Android.mk b/hal/Android.mk
+index 88dbbe5..d1d804b 100644
+--- a/hal/Android.mk
++++ b/hal/Android.mk
+@@ -231,7 +231,7 @@ LOCAL_MODULE_TAGS := optional
+ 
+ LOCAL_MODULE_OWNER := qcom
+ 
+-LOCAL_PROPRIETARY_MODULE := true
++LOCAL_PROPRIETARY_MODULE := false
+ 
+ LOCAL_CFLAGS += -Werror
+ 
+diff --git a/hal/msm8974/platform.c b/hal/msm8974/platform.c
+index 5a36f0c..86d782a 100644
+--- a/hal/msm8974/platform.c
++++ b/hal/msm8974/platform.c
+@@ -2440,7 +2440,7 @@ int platform_set_voice_volume(void *platform, int volume)
+     const char *mixer_ctl_name = "Voice Rx Gain";
+     const char *mute_mixer_ctl_name = "Voice Rx Device Mute";
+     int vol_index = 0, ret = 0;
+-    uint32_t set_values[ ] = {0,
++    long int set_values[ ] = {0,
+                               ALL_SESSION_VSID,
+                               DEFAULT_VOLUME_RAMP_DURATION_MS};
+ 
+@@ -2456,7 +2456,7 @@ int platform_set_voice_volume(void *platform, int volume)
+               __func__, mixer_ctl_name);
+         return -EINVAL;
+     }
+-    ALOGV("Setting voice volume index: %d", set_values[0]);
++    ALOGI("Setting voice volume index: %ld", set_values[0]);
+     mixer_ctl_set_array(ctl, set_values, ARRAY_SIZE(set_values));
+ 
+     // Send mute command in case volume index is max since indexes are inverted
+@@ -2474,7 +2474,7 @@ int platform_set_voice_volume(void *platform, int volume)
+               __func__, mute_mixer_ctl_name);
+         return -EINVAL;
+     }
+-    ALOGV("%s: Setting RX Device Mute to: %d", __func__, set_values[0]);
++    ALOGI("%s: Setting RX Device Mute to: %ld", __func__, set_values[0]);
+     mixer_ctl_set_array(ctl, set_values, ARRAY_SIZE(set_values));
+ 
+     if (my_data->csd != NULL) {
+@@ -2494,7 +2494,7 @@ int platform_set_mic_mute(void *platform, bool state)
+     struct mixer_ctl *ctl;
+     const char *mixer_ctl_name = "Voice Tx Mute";
+     int ret = 0;
+-    uint32_t set_values[ ] = {0,
++    long int set_values[ ] = {0,
+                               ALL_SESSION_VSID,
+                               DEFAULT_MUTE_RAMP_DURATION_MS};
+ 
+@@ -2532,7 +2532,7 @@ int platform_set_device_mute(void *platform, bool state, char *dir)
+     struct mixer_ctl *ctl;
+     char *mixer_ctl_name = NULL;
+     int ret = 0;
+-    uint32_t set_values[ ] = {0,
++    long int set_values[ ] = {0,
+                               ALL_SESSION_VSID,
+                               0};
+     if(dir == NULL) {
+-- 
+2.30.1 (Apple Git-130)
+
