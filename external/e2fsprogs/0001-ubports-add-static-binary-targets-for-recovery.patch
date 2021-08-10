@@ -1,0 +1,58 @@
+From 631915deb77e6ca406263b3785ef331239d8bcbc Mon Sep 17 00:00:00 2001
+From: Alexander Martinz <alex@amartinz.at>
+Date: Tue, 10 Aug 2021 13:26:00 +0200
+Subject: [PATCH] ubports: add static binary targets for recovery
+
+This builds e2fsck and tune2fs as static executables with their
+normal binary names (e2fsck, tune2fs), which will be used
+by our recovery.
+
+Change-Id: I009dc75006b1f0c8799da693226180855fa18c4d
+Signed-off-by: Alexander Martinz <alex@amartinz.at>
+---
+ e2fsck/Android.bp | 10 ++++++++++
+ misc/Android.bp   | 10 ++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/e2fsck/Android.bp b/e2fsck/Android.bp
+index f344312..a88587c 100644
+--- a/e2fsck/Android.bp
++++ b/e2fsck/Android.bp
+@@ -66,3 +66,13 @@ cc_binary {
+ 
+     static_libs: e2fsck_libs,
+ }
++
++cc_binary {
++    name: "e2fsck_recovery",
++    stem: "e2fsck",
++    recovery: true,
++    static_executable: true,
++    defaults: ["e2fsck-defaults"],
++
++    static_libs: e2fsck_libs,
++}
+diff --git a/misc/Android.bp b/misc/Android.bp
+index dea2f9f..df0b4d2 100644
+--- a/misc/Android.bp
++++ b/misc/Android.bp
+@@ -143,6 +143,16 @@ cc_binary {
+     static_libs: tune2fs_libs,
+ }
+ 
++cc_binary {
++    name: "tune2fs_recovery",
++    stem: "tune2fs",
++    recovery: true,
++    static_executable: true,
++    defaults: ["tune2fs-defaults"],
++
++    static_libs: tune2fs_libs,
++}
++
+ cc_library_static {
+     name: "libtune2fs",
+     defaults: ["tune2fs-defaults"],
+-- 
+2.32.0
+
