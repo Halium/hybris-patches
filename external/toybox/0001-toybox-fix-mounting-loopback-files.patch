@@ -1,0 +1,677 @@
+From cd9e9f59799260a7c49abdaea141ab35b973eb86 Mon Sep 17 00:00:00 2001
+From: Elliott Hughes <enh@google.com>
+Date: Tue, 25 Jun 2019 08:40:18 -0700
+Subject: [PATCH 02/10] losetup: minor fixes.
+
+Fix `losetup -f` to not fail with an error.
+
+Add the missing \n for `losetup -f --show FILE`.
+
+Use decimal for the device number, like the desktop losetup.
+
+Switch to the FLAG macro.
+
+Make the tests runnable as tests, and expand coverage a bit. With this
+patch, the tests pass both with and without TEST_HOST on the desktop.
+Note though that this patch is part of fixing some real-life losetup
+issues, not part of the "test cleanup" I'm also looking at. losetup is
+low down that list!
+---
+ tests/losetup.test   | 18 +++++++++++-------
+ toys/other/losetup.c | 41 ++++++++++++++++++++++++-----------------
+ 2 files changed, 35 insertions(+), 24 deletions(-)
+
+diff --git a/tests/losetup.test b/tests/losetup.test
+index f30a0fe2..c04a72b9 100755
+--- a/tests/losetup.test
++++ b/tests/losetup.test
+@@ -13,13 +13,17 @@ fi
+ 
+ truncate -s 1M blah.img &&
+ FILE="$(readlink -f blah.img)"
+-DEV="$(printf '%04s' $(stat -t blah.img | awk '{print $7}'))"
+-NODE="$(stat -t blah.img | awk '{print $8}')"
++DEV="$(stat --format %d blah.img)"
++NODE="$(stat --format %i blah.img)"
+ 
+-losetup -f 
+-losetup -f -s
+-losetup -f file
+-
+-losetup -d
++# TODO: assumes there are no loopback devices!
++testcmd "-f" "-f" "/dev/loop0\n" "" ""
++testcmd "-f blah.img" "-f blah.img" "" "" ""
++testcmd "-f --show" "-f --show blah.img" "/dev/loop1\n" "" ""
++testcmd "-a" "-a | sort" \
++  "/dev/loop0: [$DEV]:$NODE ($FILE)\n/dev/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
++testcmd "-d /dev/loop0" "-d /dev/loop0 && losetup -a" \
++  "/dev/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
++testcmd "-D" "-D && losetup -a" "" "" ""
+ 
+ rm blah.img
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index d77a9500..02856c27 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -4,7 +4,7 @@
+  *
+  * No standard. (Sigh.)
+ 
+-USE_LOSETUP(NEWTOY(losetup, ">2S(sizelimit)#s(show)ro#j:fdca[!afj]", TOYFLAG_SBIN))
++USE_LOSETUP(NEWTOY(losetup, ">2S(sizelimit)#s(show)ro#j:fdcaD[!afj]", TOYFLAG_SBIN))
+ 
+ config LOSETUP
+   bool "losetup"
+@@ -18,17 +18,18 @@ config LOSETUP
+     Instead of a device:
+     -a	Iterate through all loopback devices
+     -f	Find first unused loop device (may create one)
+-    -j	Iterate through all loopback devices associated with FILE
++    -j FILE	Iterate through all loopback devices associated with FILE
+ 
+     existing:
+     -c	Check capacity (file size changed)
+-    -d	Detach loopback device
++    -d DEV	Detach loopback device
++    -D	Detach all loopback devices
+ 
+     new:
+     -s	Show device name (alias --show)
+-    -o	Start association at OFFSET into FILE
++    -o OFF	Start association at offset OFF into FILE
+     -r	Read only
+-    -S	Limit SIZE of loopback association (alias --sizelimit)
++    -S SIZE	Limit SIZE of loopback association (alias --sizelimit)
+ */
+ 
+ #define FOR_losetup
+@@ -51,7 +52,6 @@ static void loopback_setup(char *device, char *file)
+ {
+   struct loop_info64 *loop = (void *)(toybuf+32);
+   int lfd = -1, ffd = ffd;
+-  unsigned flags = toys.optflags;
+ 
+   // Open file (ffd) and loop device (lfd)
+ 
+@@ -78,7 +78,12 @@ static void loopback_setup(char *device, char *file)
+   // Stat the loop device to see if there's a current association.
+   memset(loop, 0, sizeof(struct loop_info64));
+   if (-1 == lfd || ioctl(lfd, LOOP_GET_STATUS64, loop)) {
+-    if (errno == ENXIO && (flags & (FLAG_a|FLAG_j))) goto done;
++    if (errno == ENXIO && (FLAG(a) || FLAG(j))) goto done;
++    // ENXIO expected if we're just trying to print the first unused device.
++    if (errno == ENXIO && FLAG(f) && !file) {
++      puts(device);
++      goto done;
++    }
+     if (errno != ENXIO || !file) {
+       perror_msg_raw(device ? device : "-f");
+       goto done;
+@@ -90,9 +95,9 @@ static void loopback_setup(char *device, char *file)
+     goto done;
+ 
+   // Check size of file or delete existing association
+-  if (flags & (FLAG_c|FLAG_d)) {
++  if (FLAG(c) || FLAG(d)) {
+     // The constant is LOOP_SET_CAPACITY
+-    if (ioctl(lfd, (flags & FLAG_c) ? 0x4C07 : LOOP_CLR_FD, 0)) {
++    if (ioctl(lfd, FLAG(c) ? 0x4C07 : LOOP_CLR_FD, 0)) {
+       perror_msg_raw(device);
+       goto done;
+     }
+@@ -107,11 +112,11 @@ static void loopback_setup(char *device, char *file)
+     xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
+     s[LO_NAME_SIZE-1] = 0;
+     if (ioctl(lfd, LOOP_SET_STATUS64, loop)) perror_exit("%s=%s", device, file);
+-    if (flags & FLAG_s) printf("%s", device);
++    if (FLAG(s)) puts(device);
+     free(s);
+-  } else if (flags & FLAG_f) printf("%s", device);
++  }
+   else {
+-    xprintf("%s: [%04llx]:%llu (%s)", device, (long long)loop->lo_device,
++    xprintf("%s: [%lld]:%llu (%s)", device, (long long)loop->lo_device,
+       (long long)loop->lo_inode, loop->lo_file_name);
+     if (loop->lo_offset) xprintf(", offset %llu",
+       (unsigned long long)loop->lo_offset);
+@@ -145,7 +150,7 @@ void losetup_main(void)
+ {
+   char **s;
+ 
+-  TT.openflags = (toys.optflags & FLAG_r) ? O_RDONLY : O_RDWR;
++  TT.openflags = FLAG(r) ? O_RDONLY : O_RDWR;
+ 
+   if (TT.j) {
+     struct stat st;
+@@ -164,17 +169,19 @@ void losetup_main(void)
+ 
+   // -f(dc FILE)
+ 
+-  if (toys.optflags & FLAG_f) {
++  if (FLAG(D)) toys.optflags |= FLAG_a | FLAG_d;
++
++  if (FLAG(f)) {
+     if (toys.optc > 1) perror_exit("max 1 arg");
+     loopback_setup(NULL, *toys.optargs);
+-  } else if (toys.optflags & (FLAG_a|FLAG_j)) {
++  } else if (FLAG(a) || FLAG(j)) {
+     if (toys.optc) error_exit("bad args");
+     dirtree_read("/dev", dash_a);
+   // Do we need one DEVICE argument?
+   } else {
+-    char *file = (toys.optflags & (FLAG_d|FLAG_c)) ? NULL : toys.optargs[1];
++    char *file = (FLAG(c) || FLAG(d)) ? NULL : toys.optargs[1];
+ 
+-    if (!toys.optc || (file && toys.optc != 2)) 
++    if (!toys.optc || (file && toys.optc != 2))
+       help_exit("needs %d arg%s", 1+!!file, file ? "s" : "");
+     for (s = toys.optargs; *s; s++) {
+       loopback_setup(*s, file);
+-- 
+2.32.0
+
+
+From ed6c1d6e81ec2a3d1e2e7f9039491f556769f8d8 Mon Sep 17 00:00:00 2001
+From: Elliott Hughes <enh@google.com>
+Date: Wed, 26 Jun 2019 15:57:25 -0700
+Subject: [PATCH 03/10] losetup: fix Android.
+
+Use /dev/block/loop* more uniformly, and teach the tests which to expect.
+---
+ tests/losetup.test   | 18 +++++++++++++-----
+ toys/other/losetup.c |  8 ++++----
+ 2 files changed, 17 insertions(+), 9 deletions(-)
+
+diff --git a/tests/losetup.test b/tests/losetup.test
+index c04a72b9..7968ecd9 100755
+--- a/tests/losetup.test
++++ b/tests/losetup.test
+@@ -9,6 +9,14 @@ then
+   exit
+ fi
+ 
++# Android's loopback devices are only in /dev/block/loop*.
++# Debian has symlinks like /dev/block/7:0 back to ../loop*.
++if [ -b /dev/block/sda ]; then
++  DIR="/dev/block" # Presumably Android.
++else
++  DIR="/dev"
++fi
++
+ #testing "name" "command" "result" "infile" "stdin"
+ 
+ truncate -s 1M blah.img &&
+@@ -17,13 +25,13 @@ DEV="$(stat --format %d blah.img)"
+ NODE="$(stat --format %i blah.img)"
+ 
+ # TODO: assumes there are no loopback devices!
+-testcmd "-f" "-f" "/dev/loop0\n" "" ""
++testcmd "-f" "-f" "$DIR/loop0\n" "" ""
+ testcmd "-f blah.img" "-f blah.img" "" "" ""
+-testcmd "-f --show" "-f --show blah.img" "/dev/loop1\n" "" ""
++testcmd "-f --show" "-f --show blah.img" "$DIR/loop1\n" "" ""
+ testcmd "-a" "-a | sort" \
+-  "/dev/loop0: [$DEV]:$NODE ($FILE)\n/dev/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
+-testcmd "-d /dev/loop0" "-d /dev/loop0 && losetup -a" \
+-  "/dev/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
++  "$DIR/loop0: [$DEV]:$NODE ($FILE)\n$DIR/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
++testcmd "-d $DIR/loop0" "-d $DIR/loop0 && losetup -a" \
++  "$DIR/loop1: [$DEV]:$NODE ($FILE)\n" "" ""
+ testcmd "-D" "-D && losetup -a" "" "" ""
+ 
+ rm blah.img
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index 02856c27..8edc65ae 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -43,6 +43,7 @@ GLOBALS(
+   int openflags;
+   dev_t jdev;
+   ino_t jino;
++  char *dir;
+ )
+ 
+ // -f: *device is NULL
+@@ -65,9 +66,7 @@ static void loopback_setup(char *device, char *file)
+     // mount -o loop depends on found device being at the start of toybuf.
+     if (cfd != -1) {
+       if (0 <= (i = ioctl(cfd, 0x4C82))) { // LOOP_CTL_GET_FREE
+-        sprintf(device = toybuf, "/dev/loop%d", i);
+-        // Fallback for Android
+-        if (access(toybuf, F_OK)) sprintf(toybuf, "/dev/block/loop%d", i);
++        sprintf(device = toybuf, "%s/loop%d", TT.dir, i);
+       }
+       close(cfd);
+     }
+@@ -150,6 +149,7 @@ void losetup_main(void)
+ {
+   char **s;
+ 
++  TT.dir = CFG_TOYBOX_ON_ANDROID ? "/dev/block" : "/dev";
+   TT.openflags = FLAG(r) ? O_RDONLY : O_RDWR;
+ 
+   if (TT.j) {
+@@ -176,7 +176,7 @@ void losetup_main(void)
+     loopback_setup(NULL, *toys.optargs);
+   } else if (FLAG(a) || FLAG(j)) {
+     if (toys.optc) error_exit("bad args");
+-    dirtree_read("/dev", dash_a);
++    dirtree_read(TT.dir, dash_a);
+   // Do we need one DEVICE argument?
+   } else {
+     char *file = (FLAG(c) || FLAG(d)) ? NULL : toys.optargs[1];
+-- 
+2.32.0
+
+
+From d76a0efe0414f291e7185683b19a0b053c72eb01 Mon Sep 17 00:00:00 2001
+From: Elliott Hughes <enh@google.com>
+Date: Mon, 5 Aug 2019 16:33:16 -0700
+Subject: [PATCH 04/10] losetup: fix the race.
+
+There's a race between LOOP_CTL_GET_FREE and LOOP_SET_FD. Work around it
+by just retrying if we get EBUSY on the LOOP_SET_FD call. This is what
+similar code in ChromeOS already does.
+
+Bug: http://b/135716654
+---
+ toys/other/losetup.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index 8edc65ae..e73761a0 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -49,10 +49,11 @@ GLOBALS(
+ // -f: *device is NULL
+ 
+ // Perform requested operation on one device. Returns 1 if handled, 0 if error
+-static void loopback_setup(char *device, char *file)
++static int loopback_setup(char *device, char *file)
+ {
+   struct loop_info64 *loop = (void *)(toybuf+32);
+   int lfd = -1, ffd = ffd;
++  int racy = !device;
+ 
+   // Open file (ffd) and loop device (lfd)
+ 
+@@ -65,7 +66,7 @@ static void loopback_setup(char *device, char *file)
+ 
+     // mount -o loop depends on found device being at the start of toybuf.
+     if (cfd != -1) {
+-      if (0 <= (i = ioctl(cfd, 0x4C82))) { // LOOP_CTL_GET_FREE
++      if (0 <= (i = ioctl(cfd, LOOP_CTL_GET_FREE))) {
+         sprintf(device = toybuf, "%s/loop%d", TT.dir, i);
+       }
+       close(cfd);
+@@ -105,7 +106,10 @@ static void loopback_setup(char *device, char *file)
+     char *s = xabspath(file, 1);
+ 
+     if (!s) perror_exit("file"); // already opened, but if deleted since...
+-    if (ioctl(lfd, LOOP_SET_FD, ffd)) perror_exit("%s=%s", device, file);
++    if (ioctl(lfd, LOOP_SET_FD, ffd)) {
++      if (racy && errno == EBUSY) return 1;
++      perror_exit("%s=%s", device, file);
++    }
+     loop->lo_offset = TT.o;
+     loop->lo_sizelimit = TT.S;
+     xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
+@@ -127,6 +131,7 @@ static void loopback_setup(char *device, char *file)
+ done:
+   if (file) close(ffd);
+   if (lfd != -1) close(lfd);
++  return 0;
+ }
+ 
+ // Perform an action on all currently existing loop devices
+@@ -173,7 +178,7 @@ void losetup_main(void)
+ 
+   if (FLAG(f)) {
+     if (toys.optc > 1) perror_exit("max 1 arg");
+-    loopback_setup(NULL, *toys.optargs);
++    while (loopback_setup(NULL, *toys.optargs));
+   } else if (FLAG(a) || FLAG(j)) {
+     if (toys.optc) error_exit("bad args");
+     dirtree_read(TT.dir, dash_a);
+-- 
+2.32.0
+
+
+From 4c9cfecdecba6db4a55bac0c4337d73d45ae9253 Mon Sep 17 00:00:00 2001
+From: Alessio Balsini <balsini@android.com>
+Date: Mon, 14 Oct 2019 17:06:39 +0100
+Subject: [PATCH 05/10] losetup: Fix null-termination of src string instead of
+ dest after copy
+
+The function loopback_setup(), after copying the loopback device name
+with xstrncpy(), ensures the null-termination of the string by forcing
+its last byte to 0.
+
+Unfortunately, this operation:
+- was probably intended to null-terminate dest instead;
+- does not affect the program execution because src is free()d right
+  after;
+- if the size of src is smaller than the offset of the written zero, it
+  modifies an unknown byte in the heap.
+
+Drop the null-termination line to fix the issue: xstrcpy() automatically
+null-terminates dest, or fails if the size of src is bigger than the the
+requested number of bytes to copy.
+
+Signed-off-by: Alessio Balsini <balsini@android.com>
+---
+ toys/other/losetup.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index e73761a0..917e64ea 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -113,7 +113,6 @@ static int loopback_setup(char *device, char *file)
+     loop->lo_offset = TT.o;
+     loop->lo_sizelimit = TT.S;
+     xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
+-    s[LO_NAME_SIZE-1] = 0;
+     if (ioctl(lfd, LOOP_SET_STATUS64, loop)) perror_exit("%s=%s", device, file);
+     if (FLAG(s)) puts(device);
+     free(s);
+-- 
+2.32.0
+
+
+From 6c9215d79cdb5fa913f0a2194baef5285dce8a6b Mon Sep 17 00:00:00 2001
+From: Alessio Balsini <balsini@android.com>
+Date: Mon, 21 Oct 2019 11:02:32 +0100
+Subject: [PATCH 06/10] losetup: Fix memory leaks in loopback_setup()
+
+The function loopback_setup() uses xabspath() to get the loopback path.
+This function allocates dynamic memory which should be freed by the
+function caller.
+But there are early return cases where the dynamic memory is not freed.
+Besides the special cases of perror_exit(), for which the "early" free
+operation is simply used to silence memory analysis tools, the
+
+  if (racy && errno == EBUSY) return 1;
+
+branch may be a real cause of memory leak.
+
+Fix by adding a new free() in the racy+EBUSY branch and anticipating the
+existing free().
+
+Signed-off-by: Alessio Balsini <balsini@android.com>
+---
+ toys/other/losetup.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index 917e64ea..7f91ba1f 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -107,15 +107,16 @@ static int loopback_setup(char *device, char *file)
+ 
+     if (!s) perror_exit("file"); // already opened, but if deleted since...
+     if (ioctl(lfd, LOOP_SET_FD, ffd)) {
++      free(s);
+       if (racy && errno == EBUSY) return 1;
+       perror_exit("%s=%s", device, file);
+     }
++    xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
++    free(s);
+     loop->lo_offset = TT.o;
+     loop->lo_sizelimit = TT.S;
+-    xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
+     if (ioctl(lfd, LOOP_SET_STATUS64, loop)) perror_exit("%s=%s", device, file);
+     if (FLAG(s)) puts(device);
+-    free(s);
+   }
+   else {
+     xprintf("%s: [%lld]:%llu (%s)", device, (long long)loop->lo_device,
+-- 
+2.32.0
+
+
+From c1b572ab16e83a995c9d519acd7f45a0a555ba9d Mon Sep 17 00:00:00 2001
+From: Alessio Balsini <balsini@android.com>
+Date: Tue, 22 Oct 2019 11:31:05 +0100
+Subject: [PATCH 07/10] losetup: Change variable name to improve readability
+
+Having a dynamic memory pointer named as "s", issuing "free(s)" and then
+performing "FLAG(s)" is correct: "FLAG(s)" is a macro which uses "s" as
+a token and expands as "FLAG_s". At a glance, this would instead look
+like a use-after-free violation.
+Fix this readability issue by renaming the "s" pointer variable to
+"f_path".
+
+Change-Id: I51f139034a7dcd67a08a6952bc22c1a904162c65
+Signed-off-by: Alessio Balsini <balsini@android.com>
+---
+ toys/other/losetup.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/toys/other/losetup.c b/toys/other/losetup.c
+index 7f91ba1f..27d25a18 100644
+--- a/toys/other/losetup.c
++++ b/toys/other/losetup.c
+@@ -103,16 +103,16 @@ static int loopback_setup(char *device, char *file)
+     }
+   // Associate file with this device?
+   } else if (file) {
+-    char *s = xabspath(file, 1);
++    char *f_path = xabspath(file, 1);
+ 
+-    if (!s) perror_exit("file"); // already opened, but if deleted since...
++    if (!f_path) perror_exit("file"); // already opened, but if deleted since...
+     if (ioctl(lfd, LOOP_SET_FD, ffd)) {
+-      free(s);
++      free(f_path);
+       if (racy && errno == EBUSY) return 1;
+       perror_exit("%s=%s", device, file);
+     }
+-    xstrncpy((char *)loop->lo_file_name, s, LO_NAME_SIZE);
+-    free(s);
++    xstrncpy((char *)loop->lo_file_name, f_path, LO_NAME_SIZE);
++    free(f_path);
+     loop->lo_offset = TT.o;
+     loop->lo_sizelimit = TT.S;
+     if (ioctl(lfd, LOOP_SET_STATUS64, loop)) perror_exit("%s=%s", device, file);
+-- 
+2.32.0
+
+
+From c9dde6e25b36dc0faa8320d9102c8fd1ce162936 Mon Sep 17 00:00:00 2001
+From: Alexander Martinz <alex@amartinz.at>
+Date: Tue, 10 Aug 2021 13:41:57 +0200
+Subject: [PATCH 08/10] Regenerate generated files
+
+Change-Id: I6c3839f3bed9b2f2e11cdc255f54839b8c0adb28
+Signed-off-by: Alexander Martinz <alex@amartinz.at>
+---
+ generated/flags.h   | 24 +++++++++++++-----------
+ generated/globals.h |  1 +
+ generated/help.h    | 14 +++++++-------
+ generated/newtoys.h |  2 +-
+ 4 files changed, 22 insertions(+), 19 deletions(-)
+
+diff --git a/generated/flags.h b/generated/flags.h
+index 0255f55c..0efee393 100644
+--- a/generated/flags.h
++++ b/generated/flags.h
+@@ -1546,12 +1546,13 @@
+ #undef FOR_logwrapper
+ #endif
+ 
+-// losetup >2S(sizelimit)#s(show)ro#j:fdca[!afj] >2S(sizelimit)#s(show)ro#j:fdca[!afj]
++// losetup >2S(sizelimit)#s(show)ro#j:fdcaD[!afj] >2S(sizelimit)#s(show)ro#j:fdcaD[!afj]
+ #undef OPTSTR_losetup
+-#define OPTSTR_losetup ">2S(sizelimit)#s(show)ro#j:fdca[!afj]"
++#define OPTSTR_losetup ">2S(sizelimit)#s(show)ro#j:fdcaD[!afj]"
+ #ifdef CLEANUP_losetup
+ #undef CLEANUP_losetup
+ #undef FOR_losetup
++#undef FLAG_D
+ #undef FLAG_a
+ #undef FLAG_c
+ #undef FLAG_d
+@@ -4639,15 +4640,16 @@
+ #ifndef TT
+ #define TT this.losetup
+ #endif
+-#define FLAG_a (1<<0)
+-#define FLAG_c (1<<1)
+-#define FLAG_d (1<<2)
+-#define FLAG_f (1<<3)
+-#define FLAG_j (1<<4)
+-#define FLAG_o (1<<5)
+-#define FLAG_r (1<<6)
+-#define FLAG_s (1<<7)
+-#define FLAG_S (1<<8)
++#define FLAG_D (1<<0)
++#define FLAG_a (1<<1)
++#define FLAG_c (1<<2)
++#define FLAG_d (1<<3)
++#define FLAG_f (1<<4)
++#define FLAG_j (1<<5)
++#define FLAG_o (1<<6)
++#define FLAG_r (1<<7)
++#define FLAG_s (1<<8)
++#define FLAG_S (1<<9)
+ #endif
+ 
+ #ifdef FOR_ls
+diff --git a/generated/globals.h b/generated/globals.h
+index 82089a4d..8ba7061f 100644
+--- a/generated/globals.h
++++ b/generated/globals.h
+@@ -296,6 +296,7 @@ struct losetup_data {
+   int openflags;
+   dev_t jdev;
+   ino_t jino;
++  char *dir;
+ };
+ 
+ // toys/other/lspci.c
+diff --git a/generated/help.h b/generated/help.h
+index fbc1fb37..a1a5a59e 100644
+--- a/generated/help.h
++++ b/generated/help.h
+@@ -140,10 +140,10 @@
+ 
+ #define HELP_which "usage: which [-a] filename ...\n\nSearch $PATH for executable files matching filename(s).\n\n-a	Show all matches\n\n"
+ 
+-#define HELP_watch "usage: watch [-teb] [-n SEC] PROG ARGS\n\nRun PROG every -n seconds, showing output. Hit q to quit.\n\n-n	Loop period in seconds (default 2)\n-t	Don't print header\n-e	Exit on error\n-b	Beep on command error\n-x	Exec command directly (vs \"sh -c\")\n\n"
+-
+ #define HELP_w "usage: w\n\nShow who is logged on and since how long they logged in.\n\n"
+ 
++#define HELP_watch "usage: watch [-teb] [-n SEC] PROG ARGS\n\nRun PROG every -n seconds, showing output. Hit q to quit.\n\n-n	Loop period in seconds (default 2)\n-t	Don't print header\n-e	Exit on error\n-b	Beep on command error\n-x	Exec command directly (vs \"sh -c\")\n\n"
++
+ #define HELP_vmstat "usage: vmstat [-n] [DELAY [COUNT]]\n\nPrint virtual memory statistics, repeating each DELAY seconds, COUNT times.\n(With no DELAY, prints one line. With no COUNT, repeats until killed.)\n\nShow processes running and blocked, kilobytes swapped, free, buffered, and\ncached, kilobytes swapped in and out per second, file disk blocks input and\noutput per second, interrupts and context switches per second, percent\nof CPU time spent running user code, system code, idle, and awaiting I/O.\nFirst line is since system started, later lines are since last line.\n\n-n	Display the header only once\n\n"
+ 
+ #define HELP_vconfig "usage: vconfig COMMAND [OPTIONS]\n\nCreate and remove virtual ethernet devices\n\nadd             [interface-name] [vlan_id]\nrem             [vlan-name]\nset_flag        [interface-name] [flag-num]       [0 | 1]\nset_egress_map  [vlan-name]      [skb_priority]   [vlan_qos]\nset_ingress_map [vlan-name]      [skb_priority]   [vlan_qos]\nset_name_type   [name-type]\n\n"
+@@ -238,7 +238,7 @@
+ 
+ #define HELP_lsattr "usage: lsattr [-Radlv] [Files...]\n\nList file attributes on a Linux second extended file system.\n(AacDdijsStu defined in chattr --help)\n\n-R	Recursively list attributes of directories and their contents\n-a	List all files in directories, including files that start with '.'\n-d	List directories like other files, rather than listing their contents\n-l	List long flag names\n-v	List the file's version/generation number\n\n"
+ 
+-#define HELP_losetup "usage: losetup [-cdrs] [-o OFFSET] [-S SIZE] {-d DEVICE...|-j FILE|-af|{DEVICE FILE}}\n\nAssociate a loopback device with a file, or show current file (if any)\nassociated with a loop device.\n\nInstead of a device:\n-a	Iterate through all loopback devices\n-f	Find first unused loop device (may create one)\n-j	Iterate through all loopback devices associated with FILE\n\nexisting:\n-c	Check capacity (file size changed)\n-d	Detach loopback device\n\nnew:\n-s	Show device name (alias --show)\n-o	Start association at OFFSET into FILE\n-r	Read only\n-S	Limit SIZE of loopback association (alias --sizelimit)\n\n"
++#define HELP_losetup "usage: losetup [-cdrs] [-o OFFSET] [-S SIZE] {-d DEVICE...|-j FILE|-af|{DEVICE FILE}}\n\nAssociate a loopback device with a file, or show current file (if any)\nassociated with a loop device.\n\nInstead of a device:\n-a	Iterate through all loopback devices\n-f	Find first unused loop device (may create one)\n-j FILE	Iterate through all loopback devices associated with FILE\n\nexisting:\n-c	Check capacity (file size changed)\n-d DEV	Detach loopback device\n-D	Detach all loopback devices\n\nnew:\n-s	Show device name (alias --show)\n-o OFF	Start association at offset OFF into FILE\n-r	Read only\n-S SIZE	Limit SIZE of loopback association (alias --sizelimit)\n\n"
+ 
+ #define HELP_login "usage: login [-p] [-h host] [-f USERNAME] [USERNAME]\n\nLog in as a user, prompting for username and password if necessary.\n\n-p	Preserve environment\n-h	The name of the remote host for this login\n-f	login as USERNAME without authentication\n\n"
+ 
+@@ -326,10 +326,10 @@
+ 
+ #define HELP_useradd "usage: useradd [-SDH] [-h DIR] [-s SHELL] [-G GRP] [-g NAME] [-u UID] USER [GROUP]\n\nCreate new user, or add USER to GROUP\n\n-D       Don't assign a password\n-g NAME  Real name\n-G GRP   Add user to existing group\n-h DIR   Home directory\n-H       Don't create home directory\n-s SHELL Login shell\n-S       Create a system user\n-u UID   User id\n\n"
+ 
+-#define HELP_traceroute "usage: traceroute [-46FUIldnvr] [-f 1ST_TTL] [-m MAXTTL] [-p PORT] [-q PROBES]\n[-s SRC_IP] [-t TOS] [-w WAIT_SEC] [-g GATEWAY] [-i IFACE] [-z PAUSE_MSEC] HOST [BYTES]\n\ntraceroute6 [-dnrv] [-m MAXTTL] [-p PORT] [-q PROBES][-s SRC_IP] [-t TOS] [-w WAIT_SEC]\n  [-i IFACE] HOST [BYTES]\n\nTrace the route to HOST\n\n-4,-6 Force IP or IPv6 name resolution\n-F    Set the don't fragment bit (supports IPV4 only)\n-U    Use UDP datagrams instead of ICMP ECHO (supports IPV4 only)\n-I    Use ICMP ECHO instead of UDP datagrams (supports IPV4 only)\n-l    Display the TTL value of the returned packet (supports IPV4 only)\n-d    Set SO_DEBUG options to socket\n-n    Print numeric addresses\n-v    verbose\n-r    Bypass routing tables, send directly to HOST\n-m    Max time-to-live (max number of hops)(RANGE 1 to 255)\n-p    Base UDP port number used in probes(default 33434)(RANGE 1 to 65535)\n-q    Number of probes per TTL (default 3)(RANGE 1 to 255)\n-s    IP address to use as the source address\n-t    Type-of-service in probe packets (default 0)(RANGE 0 to 255)\n-w    Time in seconds to wait for a response (default 3)(RANGE 0 to 86400)\n-g    Loose source route gateway (8 max) (supports IPV4 only)\n-z    Pause Time in ms (default 0)(RANGE 0 to 86400) (supports IPV4 only)\n-f    Start from the 1ST_TTL hop (instead from 1)(RANGE 1 to 255) (supports IPV4 only)\n-i    Specify a network interface to operate with\n\n"
+-
+ #define HELP_tr "usage: tr [-cds] SET1 [SET2]\n\nTranslate, squeeze, or delete characters from stdin, writing to stdout\n\n-c/-C  Take complement of SET1\n-d     Delete input characters coded SET1\n-s     Squeeze multiple output characters of SET2 into one character\n\n"
+ 
++#define HELP_traceroute "usage: traceroute [-46FUIldnvr] [-f 1ST_TTL] [-m MAXTTL] [-p PORT] [-q PROBES]\n[-s SRC_IP] [-t TOS] [-w WAIT_SEC] [-g GATEWAY] [-i IFACE] [-z PAUSE_MSEC] HOST [BYTES]\n\ntraceroute6 [-dnrv] [-m MAXTTL] [-p PORT] [-q PROBES][-s SRC_IP] [-t TOS] [-w WAIT_SEC]\n  [-i IFACE] HOST [BYTES]\n\nTrace the route to HOST\n\n-4,-6 Force IP or IPv6 name resolution\n-F    Set the don't fragment bit (supports IPV4 only)\n-U    Use UDP datagrams instead of ICMP ECHO (supports IPV4 only)\n-I    Use ICMP ECHO instead of UDP datagrams (supports IPV4 only)\n-l    Display the TTL value of the returned packet (supports IPV4 only)\n-d    Set SO_DEBUG options to socket\n-n    Print numeric addresses\n-v    verbose\n-r    Bypass routing tables, send directly to HOST\n-m    Max time-to-live (max number of hops)(RANGE 1 to 255)\n-p    Base UDP port number used in probes(default 33434)(RANGE 1 to 65535)\n-q    Number of probes per TTL (default 3)(RANGE 1 to 255)\n-s    IP address to use as the source address\n-t    Type-of-service in probe packets (default 0)(RANGE 0 to 255)\n-w    Time in seconds to wait for a response (default 3)(RANGE 0 to 86400)\n-g    Loose source route gateway (8 max) (supports IPV4 only)\n-z    Pause Time in ms (default 0)(RANGE 0 to 86400) (supports IPV4 only)\n-f    Start from the 1ST_TTL hop (instead from 1)(RANGE 1 to 255) (supports IPV4 only)\n-i    Specify a network interface to operate with\n\n"
++
+ #define HELP_tftpd "usage: tftpd [-cr] [-u USER] [DIR]\n\nTransfer file from/to tftp server.\n\n-r	read only\n-c	Allow file creation via upload\n-u	run as USER\n-l	Log to syslog (inetd mode requires this)\n\n"
+ 
+ #define HELP_tftp "usage: tftp [OPTIONS] HOST [PORT]\n\nTransfer file from/to tftp server.\n\n-l FILE Local FILE\n-r FILE Remote FILE\n-g    Get file\n-p    Put file\n-b SIZE Transfer blocks of SIZE octets(8 <= SIZE <= 65464)\n\n"
+@@ -422,10 +422,10 @@
+ 
+ #define HELP_dhcpd "usage: dhcpd [-46fS] [-i IFACE] [-P N] [CONFFILE]\n\n -f    Run in foreground\n -i Interface to use\n -S    Log to syslog too\n -P N  Use port N (default ipv4 67, ipv6 547)\n -4, -6    Run as a DHCPv4 or DHCPv6 server\n\n"
+ 
+-#define HELP_dhcp6 "usage: dhcp6 [-fbnqvR] [-i IFACE] [-r IP] [-s PROG] [-p PIDFILE]\n\n      Configure network dynamically using DHCP.\n\n    -i Interface to use (default eth0)\n    -p Create pidfile\n    -s Run PROG at DHCP events\n    -t Send up to N Solicit packets\n    -T Pause between packets (default 3 seconds)\n    -A Wait N seconds after failure (default 20)\n    -f Run in foreground\n    -b Background if lease is not obtained\n    -n Exit if lease is not obtained\n    -q Exit after obtaining lease\n    -R Release IP on exit\n    -S Log to syslog too\n    -r Request this IP address\n    -v Verbose\n\n    Signals:\n    USR1  Renew current lease\n    USR2  Release current lease\n\n"
+-
+ #define HELP_dhcp "usage: dhcp [-fbnqvoCRB] [-i IFACE] [-r IP] [-s PROG] [-p PIDFILE]\n            [-H HOSTNAME] [-V VENDOR] [-x OPT:VAL] [-O OPT]\n\n     Configure network dynamically using DHCP.\n\n   -i Interface to use (default eth0)\n   -p Create pidfile\n   -s Run PROG at DHCP events (default /usr/share/dhcp/default.script)\n   -B Request broadcast replies\n   -t Send up to N discover packets\n   -T Pause between packets (default 3 seconds)\n   -A Wait N seconds after failure (default 20)\n   -f Run in foreground\n   -b Background if lease is not obtained\n   -n Exit if lease is not obtained\n   -q Exit after obtaining lease\n   -R Release IP on exit\n   -S Log to syslog too\n   -a Use arping to validate offered address\n   -O Request option OPT from server (cumulative)\n   -o Don't request any options (unless -O is given)\n   -r Request this IP address\n   -x OPT:VAL  Include option OPT in sent packets (cumulative)\n   -F Ask server to update DNS mapping for NAME\n   -H Send NAME as client hostname (default none)\n   -V VENDOR Vendor identifier (default 'toybox VERSION')\n   -C Don't send MAC as client identifier\n   -v Verbose\n\n   Signals:\n   USR1  Renew current lease\n   USR2  Release current lease\n\n\n"
+ 
++#define HELP_dhcp6 "usage: dhcp6 [-fbnqvR] [-i IFACE] [-r IP] [-s PROG] [-p PIDFILE]\n\n      Configure network dynamically using DHCP.\n\n    -i Interface to use (default eth0)\n    -p Create pidfile\n    -s Run PROG at DHCP events\n    -t Send up to N Solicit packets\n    -T Pause between packets (default 3 seconds)\n    -A Wait N seconds after failure (default 20)\n    -f Run in foreground\n    -b Background if lease is not obtained\n    -n Exit if lease is not obtained\n    -q Exit after obtaining lease\n    -R Release IP on exit\n    -S Log to syslog too\n    -r Request this IP address\n    -v Verbose\n\n    Signals:\n    USR1  Renew current lease\n    USR2  Release current lease\n\n"
++
+ #define HELP_dd "usage: dd [if=FILE] [of=FILE] [ibs=N] [obs=N] [bs=N] [count=N] [skip=N]\n        [seek=N] [conv=notrunc|noerror|sync|fsync] [status=noxfer|none]\n\nCopy/convert files.\n\nif=FILE		Read from FILE instead of stdin\nof=FILE		Write to FILE instead of stdout\nbs=N		Read and write N bytes at a time\nibs=N		Read N bytes at a time\nobs=N		Write N bytes at a time\ncount=N		Copy only N input blocks\nskip=N		Skip N input blocks\nseek=N		Skip N output blocks\nconv=notrunc	Don't truncate output file\nconv=noerror	Continue after read errors\nconv=sync	Pad blocks with zeros\nconv=fsync	Physically write data out before finishing\nstatus=noxfer	Don't show transfer rate\nstatus=none	Don't show transfer rate or records in/out\n\nNumbers may be suffixed by c (*1), w (*2), b (*512), kD (*1000), k (*1024),\nMD (*1000*1000), M (*1024*1024), GD (*1000*1000*1000) or G (*1024*1024*1024).\n\n"
+ 
+ #define HELP_crontab "usage: crontab [-u user] FILE\n               [-u user] [-e | -l | -r]\n               [-c dir]\n\nFiles used to schedule the execution of programs.\n\n-c crontab dir\n-e edit user's crontab\n-l list user's crontab\n-r delete user's crontab\n-u user\nFILE Replace crontab by FILE ('-': stdin)\n\n"
+diff --git a/generated/newtoys.h b/generated/newtoys.h
+index fd6e7163..6e274363 100644
+--- a/generated/newtoys.h
++++ b/generated/newtoys.h
+@@ -140,7 +140,7 @@ USE_LOGGER(NEWTOY(logger, "st:p:", TOYFLAG_USR|TOYFLAG_BIN))
+ USE_LOGIN(NEWTOY(login, ">1f:ph:", TOYFLAG_BIN|TOYFLAG_NEEDROOT))
+ USE_LOGNAME(NEWTOY(logname, ">0", TOYFLAG_USR|TOYFLAG_BIN))
+ USE_LOGWRAPPER(NEWTOY(logwrapper, 0, TOYFLAG_NOHELP|TOYFLAG_USR|TOYFLAG_BIN))
+-USE_LOSETUP(NEWTOY(losetup, ">2S(sizelimit)#s(show)ro#j:fdca[!afj]", TOYFLAG_SBIN))
++USE_LOSETUP(NEWTOY(losetup, ">2S(sizelimit)#s(show)ro#j:fdcaD[!afj]", TOYFLAG_SBIN))
+ USE_LS(NEWTOY(ls, "(color):;(full-time)(show-control-chars)ZgoACFHLRSabcdfhikl@mnpqrstux1[-Cxm1][-Cxml][-Cxmo][-Cxmg][-cu][-ftS][-HL][!qb]", TOYFLAG_BIN|TOYFLAG_LOCALE))
+ USE_LSATTR(NEWTOY(lsattr, "vldaR", TOYFLAG_BIN))
+ USE_LSMOD(NEWTOY(lsmod, NULL, TOYFLAG_SBIN))
+-- 
+2.32.0
+
+
+From 69e6a558af6fbc729548352565c7bd4a2ac83ea6 Mon Sep 17 00:00:00 2001
+From: wayling <waylingII@gmail.com>
+Date: Thu, 12 Dec 2019 18:00:15 +0800
+Subject: [PATCH 09/10] fix loopback device mount fail
+
+When we "losetup" success need mount loop device.
+Found this issue on AndroidQ
+---
+ toys/lsb/mount.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/toys/lsb/mount.c b/toys/lsb/mount.c
+index 296d6864..5bf300db 100644
+--- a/toys/lsb/mount.c
++++ b/toys/lsb/mount.c
+@@ -270,6 +270,7 @@ static void mount_filesystem(char *dev, char *dir, char *type,
+       dev = tortoise(1, (char *[]){"losetup",
+         (flags&MS_RDONLY) ? "-fsr" : "-fs", dev, 0});
+       if (!dev) break;
++      continue;
+     }
+ 
+     free(buf);
+-- 
+2.32.0
+
+
+From 595d12a7bf562e62382da0497813fd1f1d042ab1 Mon Sep 17 00:00:00 2001
+From: Elliott Hughes <enh@google.com>
+Date: Sat, 1 Feb 2020 21:47:51 -0800
+Subject: [PATCH 10/10] mount.c: fix an error check.
+
+Found by GCC 9:
+
+  toys/lsb/mount.c:188:22: warning: '%s' directive argument is null [-Wformat-overflow=]
+---
+ toys/lsb/mount.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/toys/lsb/mount.c b/toys/lsb/mount.c
+index 5bf300db..6b1dfa46 100644
+--- a/toys/lsb/mount.c
++++ b/toys/lsb/mount.c
+@@ -185,7 +185,7 @@ static void mount_filesystem(char *dev, char *dir, char *type,
+   if (strstart(&dev, "UUID=")) {
+     char *s = tortoise(0, (char *[]){"blkid", "-U", dev, 0});
+ 
+-    if (!dev) return error_msg("No uuid %s", dev);
++    if (!s) return error_msg("No uuid %s", dev);
+     dev = s;
+   }
+ 
+-- 
+2.32.0
+
