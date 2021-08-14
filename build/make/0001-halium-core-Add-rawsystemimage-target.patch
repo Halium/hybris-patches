@@ -1,0 +1,88 @@
+From a1e951d48200cb9613d6df40cb5673f26d97dfa5 Mon Sep 17 00:00:00 2001
+From: Alexander Martinz <alex@amartinz.at>
+Date: Sat, 14 Aug 2021 20:26:44 +0200
+Subject: [PATCH 1/2] (halium) core: config: add RESIZE2FS
+
+This will be used by an upcoming new target.
+
+Change-Id: I05298bb930bda8b98de94ee65fffa8ba9c3ffdda
+Signed-off-by: Alexander Martinz <alex@amartinz.at>
+---
+ core/config.mk | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/core/config.mk b/core/config.mk
+index a1a5e356c..408d9f01a 100644
+--- a/core/config.mk
++++ b/core/config.mk
+@@ -584,6 +584,7 @@ MKF2FSUSERIMG := $(HOST_OUT_EXECUTABLES)/mkf2fsuserimg.sh
+ SIMG2IMG := $(HOST_OUT_EXECUTABLES)/simg2img$(HOST_EXECUTABLE_SUFFIX)
+ IMG2SIMG := $(HOST_OUT_EXECUTABLES)/img2simg$(HOST_EXECUTABLE_SUFFIX)
+ E2FSCK := $(HOST_OUT_EXECUTABLES)/e2fsck$(HOST_EXECUTABLE_SUFFIX)
++RESIZE2FS := $(HOST_OUT_EXECUTABLES)/resize2fs$(HOST_EXECUTABLE_SUFFIX)
+ TUNE2FS := $(HOST_OUT_EXECUTABLES)/tune2fs$(HOST_EXECUTABLE_SUFFIX)
+ JARJAR := $(HOST_OUT_JAVA_LIBRARIES)/jarjar.jar
+ DATA_BINDING_COMPILER := $(HOST_OUT_JAVA_LIBRARIES)/databinding-compiler.jar
+-- 
+2.32.0
+
+
+From 2276ad0796fbb17e65c0b67f8918fc687d5ba916 Mon Sep 17 00:00:00 2001
+From: Alexander Martinz <alex@amartinz.at>
+Date: Sat, 14 Aug 2021 20:22:51 +0200
+Subject: [PATCH 2/2] (halium) core: Add "rawsystemimage" target
+
+This adds a new target "rawsystemimage", which can be used to build
+a rootfs image for halium/ubuntu touch.
+
+Previously you had to manually generate an "android-rootfs.img"
+using "system.img":
+  - make systemimage
+  - simg2img \
+        out/target/product/halium_arm64/system.img \
+        out/target/product/halium_arm64/android-rootfs.img
+  - resize2fs -M out/target/product/halium_arm64/android-rootfs.img
+
+Now you can directly generate android-rootfs.img without any extra
+manual steps:
+  - make rawsystemimage
+
+Change-Id: Ieb4be162777d25e741029a7488fbfb52022a8356
+Signed-off-by: Alexander Martinz <alex@amartinz.at>
+---
+ core/Makefile | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/core/Makefile b/core/Makefile
+index a5eef489f..4e2c94faa 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -792,6 +792,9 @@ DEFAULT_KEY_CERT_PAIR := $(strip $(DEFAULT_SYSTEM_DEV_CERTIFICATE))
+ .PHONY: systemimage
+ systemimage:
+ 
++.PHONY: rawsystemimage
++rawsystemimage:
++
+ # -----------------------------------------------------------------
+ 
+ .PHONY: event-log-tags
+@@ -2389,6 +2392,15 @@ $(INSTALLED_SYSTEMIMAGE_TARGET): $(BUILT_SYSTEMIMAGE) $(RECOVERY_FROM_BOOT_PATCH
+ 
+ systemimage: $(INSTALLED_SYSTEMIMAGE_TARGET)
+ 
++INSTALLED_RAWSYSTEMIMAGE_TARGET := $(PRODUCT_OUT)/android-rootfs.img
++$(INSTALLED_RAWSYSTEMIMAGE_TARGET): $(INSTALLED_SYSTEMIMAGE_TARGET) $(RESIZE2FS) $(SIMG2IMG)
++	@echo "Generating raw system fs image from $(INSTALLED_SYSTEMIMAGE_TARGET)"
++	$(hide) $(SIMG2IMG) $(INSTALLED_SYSTEMIMAGE_TARGET) $@
++	$(hide) $(RESIZE2FS) -M $@
++	@echo "Install raw system fs image: $@"
++
++rawsystemimage: $(INSTALLED_RAWSYSTEMIMAGE_TARGET)
++
+ .PHONY: systemimage-nodeps snod
+ systemimage-nodeps snod: $(filter-out systemimage-nodeps snod,$(MAKECMDGOALS)) \
+ 	            | $(INTERNAL_USERIMAGES_DEPS)
+-- 
+2.32.0
+
