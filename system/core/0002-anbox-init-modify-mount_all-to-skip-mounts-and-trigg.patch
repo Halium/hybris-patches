@@ -1,7 +1,7 @@
-From 8eead229b8945d9d06ca993d923bdd0436671a8f Mon Sep 17 00:00:00 2001
+From bdb2e1ec79c05045473c00853c1108414a64a21f Mon Sep 17 00:00:00 2001
 From: Asriel Dreemurr <asriel.danctnix@gmail.com>
 Date: Wed, 11 Nov 2020 08:08:51 +0700
-Subject: [PATCH] (anbox) init: modify mount_all to skip mounts and trigger
+Subject: [PATCH 2/4] (anbox) init: modify mount_all to skip mounts and trigger
  nonencrypted state
 
 Change-Id: Iae8cffa6aeb2d56f35a51f0e9f52fd92402c43e9
@@ -54,5 +54,5 @@ index d5afabce8..1fcdb141e 100644
      # Once metadata has been mounted, we'll need vold to deal with userdata checkpointing
      start vold
 -- 
-2.32.0
+2.28.0
 

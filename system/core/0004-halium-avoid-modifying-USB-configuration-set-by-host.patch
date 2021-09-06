@@ -1,4 +1,4 @@
-From 75421b84c7656046492853370663e9b279d758ae Mon Sep 17 00:00:00 2001
+From 97761ae4bcf2e821e4a0bb63d354478b5e02cb37 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sat, 19 Dec 2020 21:42:41 +0200
 Subject: [PATCH] (halium) avoid modifying USB configuration set by host
@@ -39,5 +39,5 @@ index 809044aaa..56c89344f 100644
      oneshot
      user root
 -- 
-2.32.0
+2.28.0
 
