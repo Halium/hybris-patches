@@ -1,0 +1,32 @@
+From 55b620a99c15182a81eef6f39fb4de2cb0e30f70 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sun, 12 Dec 2021 17:24:57 +0100
+Subject: [PATCH] (halium) init.rc: Create directory for trust-store socket
+
+This enables the minimediaservice process to create the socket
+in a well-known location for consumption by trust-store.
+
+Change-Id: Iac114c1b0d92afb54d39ad314c6b521d6c088dc1
+---
+ rootdir/init.rc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index d5afabce86..0886a658d0 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -298,6 +298,11 @@ on init
+     chmod 0660 /sys/power/wake_lock
+     chmod 0660 /sys/power/wake_unlock
+ 
++    # Create directory necessary for the CameraService trust-store socket
++    mkdir /dev/socket/camera_service
++    chown root camera /dev/socket/camera_service
++    chmod 0775 /dev/socket/camera_service
++
+     # Start logd before any other services run to ensure we capture all of their logs.
+     start logd
+ 
+-- 
+2.35.0.rc2
+
