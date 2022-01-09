@@ -1,0 +1,65 @@
+From e811adb3164e6841cec473e98e5a233b36208995 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sun, 9 Jan 2022 14:38:12 +0100
+Subject: [PATCH] msm8974: Allow speaker phone in combination with handset mic
+
+On devices like the Pixel 3a something related to Fluence is
+causing trouble with speaker phone cancellation and quality.
+
+Neither property combinations work, so introduce a new property
+to allow use of speaker phone during calls with the input
+coming from the typical handset microphone.
+
+Property: persist.halium.speaker_plus_handsetmic
+Type: boolean
+Change-Id: Ifa29441771c829ea3bc14aea68f2ca504f7d9afc
+---
+ hal/msm8974/platform.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/hal/msm8974/platform.c b/hal/msm8974/platform.c
+index 86d782a..786f417 100644
+--- a/hal/msm8974/platform.c
++++ b/hal/msm8974/platform.c
+@@ -137,6 +137,7 @@ struct platform_data {
+     bool fluence_in_voice_call;
+     bool fluence_in_voice_comm;
+     bool fluence_in_voice_rec;
++    bool speaker_plus_handsetmic;
+     /* 0 = no fluence, 1 = fluence, 2 = fluence pro */
+     int  fluence_type;
+     int  source_mic_type;
+@@ -1680,6 +1681,7 @@ void *platform_init(struct audio_device *adev)
+     my_data->fluence_in_voice_call = false;
+     my_data->fluence_in_voice_comm = false;
+     my_data->fluence_in_voice_rec = false;
++    my_data->speaker_plus_handsetmic = false;
+ 
+     property_get("ro.qc.sdk.audio.fluencetype", value, "none");
+     if (!strcmp("fluencepro", value)) {
+@@ -1712,6 +1714,11 @@ void *platform_init(struct audio_device *adev)
+         }
+     }
+ 
++    property_get("persist.halium.speaker_plus_handsetmic", value, "");
++    if (!strcmp("true", value)) {
++        my_data->speaker_plus_handsetmic = true;
++    }
++
+     // support max to mono, example if max count is 3, usecase supports Three, dual and mono mic
+     switch (my_data->max_mic_count) {
+         case 4:
+@@ -2941,7 +2948,9 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
+                    out_device & AUDIO_DEVICE_OUT_SPEAKER_SAFE ||
+                    out_device & AUDIO_DEVICE_OUT_WIRED_HEADPHONE ||
+                    out_device & AUDIO_DEVICE_OUT_LINE) {
+-            if (my_data->fluence_in_voice_call && my_data->fluence_in_spkr_mode) {
++            if (my_data->speaker_plus_handsetmic) {
++                snd_device = SND_DEVICE_IN_HANDSET_MIC;
++            } else if (my_data->fluence_in_voice_call && my_data->fluence_in_spkr_mode) {
+                 if (my_data->source_mic_type & SOURCE_DUAL_MIC) {
+                     snd_device = SND_DEVICE_IN_VOICE_SPEAKER_DMIC;
+                 } else {
+-- 
+2.32.0 (Apple Git-132)
+
