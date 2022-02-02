@@ -1,0 +1,421 @@
+From 0435586f670e398d453ccf95081a103cbf809713 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Thu, 3 Feb 2022 00:02:06 +0100
+Subject: [PATCH] (halium) Backport CCodec input surface changes
+
+This patch allows the use of C2 input surfaces in 64bit processes.
+Allows the use of VideoNativeMetadata when the corresponding property
+debug.stagefright.c2inputsurface equals -1.
+
+Change-Id: I1cf5e6cb16e0b898523535816df6ac25f392ff03
+---
+ codec2/hidl/client/client.cpp               |  16 +-
+ media/sfplugin/Android.bp                   |   2 +
+ media/sfplugin/CCodec.cpp                   |  18 ++
+ media/sfplugin/Codec2Buffer.cpp             |  32 +++-
+ media/sfplugin/Omx2IGraphicBufferSource.cpp | 185 ++++++++++++++++++++
+ media/sfplugin/Omx2IGraphicBufferSource.h   |  47 +++++
+ 6 files changed, 282 insertions(+), 18 deletions(-)
+ create mode 100644 media/sfplugin/Omx2IGraphicBufferSource.cpp
+ create mode 100644 media/sfplugin/Omx2IGraphicBufferSource.h
+
+diff --git a/codec2/hidl/client/client.cpp b/codec2/hidl/client/client.cpp
+index 1ef1c42..a65d67b 100644
+--- a/codec2/hidl/client/client.cpp
++++ b/codec2/hidl/client/client.cpp
+@@ -774,17 +774,13 @@ std::shared_ptr<Codec2Client::Interface>
+ }
+ 
+ std::shared_ptr<Codec2Client::InputSurface> Codec2Client::CreateInputSurface() {
+-    uint32_t serviceMask = ::android::base::GetUintProperty(
+-            "debug.stagefright.c2inputsurface", uint32_t(0));
+     for (size_t i = 0; i < kNumClients; ++i) {
+-        if ((1 << i) & serviceMask) {
+-            std::shared_ptr<Codec2Client> client = getClient(i);
+-            std::shared_ptr<Codec2Client::InputSurface> inputSurface;
+-            if (client &&
+-                    client->createInputSurface(&inputSurface) == C2_OK &&
+-                    inputSurface) {
+-                return inputSurface;
+-            }
++        std::shared_ptr<Codec2Client> client = getClient(i);
++        std::shared_ptr<Codec2Client::InputSurface> inputSurface;
++        if (client &&
++                client->createInputSurface(&inputSurface) == C2_OK &&
++                inputSurface) {
++            return inputSurface;
+         }
+     }
+     ALOGW("Could not create an input surface from any Codec2.0 services.");
+diff --git a/media/sfplugin/Android.bp b/media/sfplugin/Android.bp
+index 831fb35..b017e56 100644
+--- a/media/sfplugin/Android.bp
++++ b/media/sfplugin/Android.bp
+@@ -8,6 +8,7 @@ cc_library_shared {
+         "CCodecConfig.cpp",
+         "Codec2Buffer.cpp",
+         "Codec2InfoBuilder.cpp",
++        "Omx2IGraphicBufferSource.cpp",
+         "ReflectedParamUpdater.cpp",
+         "SkipCutBuffer.cpp",
+     ],
+@@ -42,6 +43,7 @@ cc_library_shared {
+         "libstagefright_codec2_vndk",
+         "libstagefright_codecbase",
+         "libstagefright_foundation",
++        "libstagefright_omx",
+         "libstagefright_omx_utils",
+         "libstagefright_xmlparser",
+         "libui",
+diff --git a/media/sfplugin/CCodec.cpp b/media/sfplugin/CCodec.cpp
+index d9a38b6..0fb617e 100644
+--- a/media/sfplugin/CCodec.cpp
++++ b/media/sfplugin/CCodec.cpp
+@@ -46,6 +46,7 @@
+ #include "CCodec.h"
+ #include "CCodecBufferChannel.h"
+ #include "InputSurfaceWrapper.h"
++#include "Omx2IGraphicBufferSource.h"
+ 
+ extern "C" android::PersistentSurface *CreateInputSurface();
+ 
+@@ -1733,7 +1734,24 @@ extern "C" android::CodecBase *CreateCodec() {
+ }
+ 
+ extern "C" android::PersistentSurface *CreateInputSurface() {
++    using namespace android;
+     // Attempt to create a Codec2's input surface.
++        if (property_get_int32("debug.stagefright.c2inputsurface", 0) == -1) {
++            sp<IGraphicBufferProducer> gbp;
++            sp<OmxGraphicBufferSource> gbs = new OmxGraphicBufferSource();
++            status_t err = gbs->initCheck();
++            if (err != OK) {
++                ALOGE("Failed to create persistent input surface: error %d", err);
++                return nullptr;
++            }
++            return new PersistentSurface(
++                    gbs->getIGraphicBufferProducer(),
++                    sp<IGraphicBufferSource>(
++                        new Omx2IGraphicBufferSource(gbs)));
++        } else {
++            return nullptr;
++        }
++    
+     std::shared_ptr<android::Codec2Client::InputSurface> inputSurface =
+             android::Codec2Client::CreateInputSurface();
+     if (inputSurface) {
+diff --git a/media/sfplugin/Codec2Buffer.cpp b/media/sfplugin/Codec2Buffer.cpp
+index 64a48f5..87ab0a1 100644
+--- a/media/sfplugin/Codec2Buffer.cpp
++++ b/media/sfplugin/Codec2Buffer.cpp
+@@ -25,6 +25,7 @@
+ #include <media/stagefright/foundation/AMessage.h>
+ #include <media/stagefright/foundation/AUtils.h>
+ #include <nativebase/nativebase.h>
++#include <android-base/properties.h>
+ 
+ #include <C2AllocatorGralloc.h>
+ #include <C2BlockInternal.h>
+@@ -298,6 +299,7 @@ public:
+                     }
+                     // fall through if we could not wrap
+ 
++                    case COLOR_FormatSurface:
+                     case COLOR_FormatYUV420Planar:
+                     case COLOR_FormatYUV420PackedPlanar:
+                         mediaImage->mPlane[mediaImage->Y].mOffset = 0;
+@@ -560,14 +562,32 @@ std::shared_ptr<C2Buffer> GraphicBlockBuffer::asC2Buffer() {
+ GraphicMetadataBuffer::GraphicMetadataBuffer(
+         const sp<AMessage> &format,
+         const std::shared_ptr<C2Allocator> &alloc)
+-    : Codec2Buffer(format, new ABuffer(sizeof(VideoNativeMetadata))),
++    : Codec2Buffer(format, new ABuffer(sizeof(VideoNativeMetadata_ptrSized))),
+       mAlloc(alloc) {
+-    ((VideoNativeMetadata *)base())->pBuffer = 0;
++    ((VideoNativeMetadata_ptrSized *)base())->pBuffer = 0;
+ }
+ 
+ std::shared_ptr<C2Buffer> GraphicMetadataBuffer::asC2Buffer() {
+-#ifndef __LP64__
+-    VideoNativeMetadata *meta = (VideoNativeMetadata *)base();
++#ifdef __LP64__
++    static std::once_flag s_checkOnce;
++    static bool s_is64bitOk {true};
++    std::call_once(s_checkOnce, [&](){
++        const std::string abi32list =
++        ::android::base::GetProperty("ro.product.cpu.abilist32", "");
++        if (!abi32list.empty()) {
++            int32_t inputSurfaceSetting =
++            ::android::base::GetIntProperty("debug.stagefright.c2inputsurface", int32_t(0));
++            s_is64bitOk = inputSurfaceSetting != 0;
++        }
++    });
++    if (!s_is64bitOk) {
++        ALOGE("GraphicMetadataBuffer does not work in 32+64 system if compiled as 64-bit object"\
++              "when debug.stagefright.c2inputsurface is set to 0");
++        return nullptr;
++    }
++#endif
++
++    VideoNativeMetadata_ptrSized *meta = (VideoNativeMetadata_ptrSized *)base();
+     ANativeWindowBuffer *buffer = (ANativeWindowBuffer *)meta->pBuffer;
+     if (buffer == nullptr) {
+         ALOGD("VideoNativeMetadata contains null buffer");
+@@ -594,10 +614,6 @@ std::shared_ptr<C2Buffer> GraphicMetadataBuffer::asC2Buffer() {
+     // TODO: fence
+     return C2Buffer::CreateGraphicBuffer(
+             block->share(C2Rect(buffer->width, buffer->height), C2Fence()));
+-#else
+-    ALOGE("GraphicMetadataBuffer does not work on 64-bit arch");
+-    return nullptr;
+-#endif
+ }
+ 
+ // ConstGraphicBlockBuffer
+diff --git a/media/sfplugin/Omx2IGraphicBufferSource.cpp b/media/sfplugin/Omx2IGraphicBufferSource.cpp
+new file mode 100644
+index 0000000..764fa00
+--- /dev/null
++++ b/media/sfplugin/Omx2IGraphicBufferSource.cpp
+@@ -0,0 +1,185 @@
++/*
++ * Copyright 2019 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifdef __LP64__
++#define OMX_ANDROID_COMPILE_AS_32BIT_ON_64BIT_PLATFORMS
++#endif
++
++//#define LOG_NDEBUG 0
++#define LOG_TAG "Omx2IGraphicBufferSource"
++#include <android-base/logging.h>
++
++#include "Omx2IGraphicBufferSource.h"
++
++#include <android/BnOMXBufferSource.h>
++#include <media/OMXBuffer.h>
++#include <media/stagefright/omx/OMXUtils.h>
++
++#include <OMX_Component.h>
++#include <OMX_Index.h>
++#include <OMX_IndexExt.h>
++
++namespace android {
++
++namespace /* unnamed */ {
++
++// OmxGraphicBufferSource -> IOMXBufferSource
++
++struct OmxGbs2IOmxBs : public BnOMXBufferSource {
++    sp<OmxGraphicBufferSource> mBase;
++    OmxGbs2IOmxBs(sp<OmxGraphicBufferSource> const& base) : mBase{base} {}
++    BnStatus onOmxExecuting() override {
++        return mBase->onOmxExecuting();
++    }
++    BnStatus onOmxIdle() override {
++        return mBase->onOmxIdle();
++    }
++    BnStatus onOmxLoaded() override {
++        return mBase->onOmxLoaded();
++    }
++    BnStatus onInputBufferAdded(int32_t bufferId) override {
++        return mBase->onInputBufferAdded(bufferId);
++    }
++    BnStatus onInputBufferEmptied(
++            int32_t bufferId,
++            OMXFenceParcelable const& fenceParcel) override {
++        return mBase->onInputBufferEmptied(bufferId, fenceParcel.get());
++    }
++};
++
++struct OmxNodeWrapper : public IOmxNodeWrapper {
++    sp<IOMXNode> mBase;
++    OmxNodeWrapper(sp<IOMXNode> const& base) : mBase{base} {}
++    status_t emptyBuffer(
++            int32_t bufferId, uint32_t flags,
++            const sp<GraphicBuffer> &buffer,
++            int64_t timestamp, int fenceFd) override {
++        return mBase->emptyBuffer(bufferId, buffer, flags, timestamp, fenceFd);
++    }
++    void dispatchDataSpaceChanged(
++            int32_t dataSpace, int32_t aspects, int32_t pixelFormat) override {
++        omx_message msg{};
++        msg.type = omx_message::EVENT;
++        msg.fenceFd = -1;
++        msg.u.event_data.event = OMX_EventDataSpaceChanged;
++        msg.u.event_data.data1 = dataSpace;
++        msg.u.event_data.data2 = aspects;
++        msg.u.event_data.data3 = pixelFormat;
++        mBase->dispatchMessage(msg);
++    }
++};
++
++} // unnamed namespace
++
++// Omx2IGraphicBufferSource
++Omx2IGraphicBufferSource::Omx2IGraphicBufferSource(
++        sp<OmxGraphicBufferSource> const& base)
++      : mBase{base},
++        mOMXBufferSource{new OmxGbs2IOmxBs(base)} {
++}
++
++BnStatus Omx2IGraphicBufferSource::setSuspend(
++        bool suspend, int64_t timeUs) {
++    return BnStatus::fromStatusT(mBase->setSuspend(suspend, timeUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::setRepeatPreviousFrameDelayUs(
++        int64_t repeatAfterUs) {
++    return BnStatus::fromStatusT(mBase->setRepeatPreviousFrameDelayUs(repeatAfterUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::setMaxFps(float maxFps) {
++    return BnStatus::fromStatusT(mBase->setMaxFps(maxFps));
++}
++
++BnStatus Omx2IGraphicBufferSource::setTimeLapseConfig(
++        double fps, double captureFps) {
++    return BnStatus::fromStatusT(mBase->setTimeLapseConfig(fps, captureFps));
++}
++
++BnStatus Omx2IGraphicBufferSource::setStartTimeUs(
++        int64_t startTimeUs) {
++    return BnStatus::fromStatusT(mBase->setStartTimeUs(startTimeUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::setStopTimeUs(
++        int64_t stopTimeUs) {
++    return BnStatus::fromStatusT(mBase->setStopTimeUs(stopTimeUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::getStopTimeOffsetUs(
++        int64_t *stopTimeOffsetUs) {
++    return BnStatus::fromStatusT(mBase->getStopTimeOffsetUs(stopTimeOffsetUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::setColorAspects(
++        int32_t aspects) {
++    return BnStatus::fromStatusT(mBase->setColorAspects(aspects));
++}
++
++BnStatus Omx2IGraphicBufferSource::setTimeOffsetUs(
++        int64_t timeOffsetsUs) {
++    return BnStatus::fromStatusT(mBase->setTimeOffsetUs(timeOffsetsUs));
++}
++
++BnStatus Omx2IGraphicBufferSource::signalEndOfInputStream() {
++    return BnStatus::fromStatusT(mBase->signalEndOfInputStream());
++}
++
++BnStatus Omx2IGraphicBufferSource::configure(
++        const sp<IOMXNode>& omxNode, int32_t dataSpace) {
++    if (omxNode == NULL) {
++        return BnStatus::fromServiceSpecificError(BAD_VALUE);
++    }
++
++    // Do setInputSurface() first, the node will try to enable metadata
++    // mode on input, and does necessary error checking. If this fails,
++    // we can't use this input surface on the node.
++    status_t err = omxNode->setInputSurface(mOMXBufferSource);
++    if (err != NO_ERROR) {
++        ALOGE("Unable to set input surface: %d", err);
++        return BnStatus::fromServiceSpecificError(err);
++    }
++
++    uint32_t consumerUsage;
++    if (omxNode->getParameter(
++            (OMX_INDEXTYPE)OMX_IndexParamConsumerUsageBits,
++            &consumerUsage, sizeof(consumerUsage)) != OK) {
++        consumerUsage = 0;
++    }
++
++    OMX_PARAM_PORTDEFINITIONTYPE def;
++    InitOMXParams(&def);
++    def.nPortIndex = 0; // kPortIndexInput
++
++    err = omxNode->getParameter(
++            OMX_IndexParamPortDefinition, &def, sizeof(def));
++    if (err != NO_ERROR) {
++        ALOGE("Failed to get port definition: %d", err);
++        return BnStatus::fromServiceSpecificError(UNKNOWN_ERROR);
++    }
++
++    return BnStatus::fromStatusT(mBase->configure(
++            new OmxNodeWrapper(omxNode),
++            dataSpace,
++            def.nBufferCountActual,
++            def.format.video.nFrameWidth,
++            def.format.video.nFrameHeight,
++            consumerUsage));
++}
++
++} // namespace android
++
+diff --git a/media/sfplugin/Omx2IGraphicBufferSource.h b/media/sfplugin/Omx2IGraphicBufferSource.h
+new file mode 100644
+index 0000000..20fd1ec
+--- /dev/null
++++ b/media/sfplugin/Omx2IGraphicBufferSource.h
+@@ -0,0 +1,47 @@
++/*
++ * Copyright 2019 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef OMX_2_IGRAPHICBUFFERSOURCE_H_
++#define OMX_2_IGRAPHICBUFFERSOURCE_H_
++
++#include <android/BnGraphicBufferSource.h>
++#include <media/stagefright/omx/OmxGraphicBufferSource.h>
++
++namespace android {
++
++using BnStatus = ::android::binder::Status;
++
++struct Omx2IGraphicBufferSource : public BnGraphicBufferSource {
++    sp<OmxGraphicBufferSource> mBase;
++    sp<IOMXBufferSource> mOMXBufferSource;
++    Omx2IGraphicBufferSource(sp<OmxGraphicBufferSource> const& base);
++    BnStatus configure(const sp<IOMXNode>& omxNode, int32_t dataSpace) override;
++    BnStatus setSuspend(bool suspend, int64_t timeUs) override;
++    BnStatus setRepeatPreviousFrameDelayUs(int64_t repeatAfterUs) override;
++    BnStatus setMaxFps(float maxFps) override;
++    BnStatus setTimeLapseConfig(double fps, double captureFps) override;
++    BnStatus setStartTimeUs(int64_t startTimeUs) override;
++    BnStatus setStopTimeUs(int64_t stopTimeUs) override;
++    BnStatus getStopTimeOffsetUs(int64_t *stopTimeOffsetUs) override;
++    BnStatus setColorAspects(int32_t aspects) override;
++    BnStatus setTimeOffsetUs(int64_t timeOffsetsUs) override;
++    BnStatus signalEndOfInputStream() override;
++};
++
++} // namespace android
++
++#endif // OMX_2_IGRAPHICBUFFERSOURCE_H_
++
+-- 
+2.32.0 (Apple Git-132)
+
