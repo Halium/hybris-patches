@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Mon, 21 Mar 2022 22:00:10 +0200
+Subject: [PATCH] (halium) system_properties: allow property area to be owned
+ by nobody user/group
+
+Useful when using libhybris inside unshared user namespace containers
+
+Change-Id: Idfb6408490f09674c9c56ae5bb7901e83b842cfe
+---
+ libc/system_properties/prop_area.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libc/system_properties/prop_area.cpp b/libc/system_properties/prop_area.cpp
+index 04be16230..19476faa5 100644
+--- a/libc/system_properties/prop_area.cpp
++++ b/libc/system_properties/prop_area.cpp
+@@ -110,7 +110,9 @@ prop_area* prop_area::map_fd_ro(const int fd) {
+     return nullptr;
+   }
+ 
+-  if ((fd_stat.st_uid != 0) || (fd_stat.st_gid != 0) ||
++  // Halium: allow file to be owned by nobody (65534) user/group for unprivileged containers
++  if ((fd_stat.st_uid != 0 && fd_stat.st_uid != 65534) ||
++      (fd_stat.st_gid != 0 && fd_stat.st_gid != 65534) ||
+       ((fd_stat.st_mode & (S_IWGRP | S_IWOTH)) != 0) ||
+       (fd_stat.st_size < static_cast<off_t>(sizeof(prop_area)))) {
+     return nullptr;
+-- 
+2.34.1
+

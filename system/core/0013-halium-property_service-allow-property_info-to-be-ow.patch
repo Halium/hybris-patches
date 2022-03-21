@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Mon, 21 Mar 2022 19:31:57 +0200
+Subject: [PATCH] (halium) libpropertyinfoparser: allow property_info to be owned by
+ nobody user/group
+
+Useful when using libhybris inside unshared user namespace containers
+
+Change-Id: I536ce5f15b995243de1284238763d95d55997168
+---
+ .../libpropertyinfoparser/property_info_parser.cpp            | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/property_service/libpropertyinfoparser/property_info_parser.cpp b/property_service/libpropertyinfoparser/property_info_parser.cpp
+index 489d81a67..622bd0f24 100644
+--- a/property_service/libpropertyinfoparser/property_info_parser.cpp
++++ b/property_service/libpropertyinfoparser/property_info_parser.cpp
+@@ -205,7 +205,9 @@ bool PropertyInfoAreaFile::LoadPath(const char* filename) {
+     return false;
+   }
+ 
+-  if ((fd_stat.st_uid != 0) || (fd_stat.st_gid != 0) ||
++  // Halium: allow file to be owned by nobody (65534) user/group for unprivileged containers
++  if ((fd_stat.st_uid != 0 && fd_stat.st_uid != 65534) ||
++      (fd_stat.st_gid != 0 && fd_stat.st_gid != 65534) ||
+       ((fd_stat.st_mode & (S_IWGRP | S_IWOTH)) != 0) ||
+       (fd_stat.st_size < static_cast<off_t>(sizeof(PropertyInfoArea)))) {
+     close(fd);
+-- 
+2.34.1
+
