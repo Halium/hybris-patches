@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Mon, 16 May 2022 15:48:26 +0300
+Subject: [PATCH] (halium) core: Add "recoveryramdisk" target
+
+This adds a new target "recoveryramdisk", which can be used to build
+recovery ramdisk without compiling kernel for full recovery image.
+
+The goal is to be able to build "generic" recovery ramdisk for
+Halium device tree that can be further customized per device by
+overlays inside non-Android build system adaptation tree.
+
+Change-Id: Iedc1b3b97e22e615e1480505bfb5e294aa08b263
+---
+ core/Makefile | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/core/Makefile b/core/Makefile
+index f6c2463..513b781 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -2044,6 +2044,9 @@ $(recovery_ramdisk): $(MINIGZIP) \
+ 	@echo ----- Making compressed recovery ramdisk ------
+ 	$(hide) $(RECOVERY_RAMDISK_COMPRESSOR) < $(recovery_uncompressed_ramdisk) > $@
+ 
++.PHONY: recoveryramdisk
++recoveryramdisk: $(recovery_ramdisk)
++
+ ifndef BOARD_CUSTOM_BOOTIMG_MK
+ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTIMG) $(recovery_ramdisk) $(recovery_kernel) \
+ 	$(RECOVERYIMAGE_EXTRA_DEPS)
