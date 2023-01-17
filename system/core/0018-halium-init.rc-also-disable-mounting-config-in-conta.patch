@@ -1,0 +1,50 @@
+From e60ce2ddb44088212759e9a7fd8d7f9ece2c4466 Mon Sep 17 00:00:00 2001
+From: Ratchanan Srirattanamet <ratchanan@ubports.com>
+Date: Tue, 16 Aug 2022 18:04:38 +0700
+Subject: [PATCH] (halium) init.rc: also disable mounting /config in container
+
+We've decided that we will handle everything USB in the host side.
+Leaving this mounted inside the container opens a chance for vendor
+HALs to mess with the USB configuration, risking us losing any USB
+connection with the device.
+
+A few considerations went into this:
+- I've checked that recovery uses a separated copy of this file, and
+  will not be affected.
+- At least on Volla Phone 22, the only other thing using configfs is
+  sdcardfs, which is about the emulated SD card feature on Android and
+  is not related to our usecase.
+- While this disables the possibility to use vendor HALs to config the
+  USB, I think that USB on configfs is a simple enough endeavor that
+  can be handled generically given some simple configurations (namely
+  desired vendor ID and product IDs). I consider doing it ourselves
+  simpler than trying to use the HIDL-ify USB HAL. Besides, any special
+  mode available in vendor HALs are likely to be useless without the
+  rest of Android stack anyway.
+
+Change-Id: Iefe6cf0b806d67acb5aedb52e8bc3275686bd550
+---
+ rootdir/init.rc | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index 7a908d0e2..5d93b8749 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -105,9 +105,10 @@ on init
+ 
+     restorecon_recursive /mnt
+ 
+-    mount configfs none /config nodev noexec nosuid
+-    chmod 0770 /config/sdcardfs
+-    chown system package_info /config/sdcardfs
++    # Disabled for Halium
++    # mount configfs none /config nodev noexec nosuid
++    # chmod 0770 /config/sdcardfs
++    # chown system package_info /config/sdcardfs
+ 
+     mkdir /mnt/secure 0700 root root
+     mkdir /mnt/secure/asec 0700 root root
+-- 
+2.25.1
+
