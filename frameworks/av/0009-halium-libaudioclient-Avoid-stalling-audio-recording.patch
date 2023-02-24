@@ -1,0 +1,53 @@
+From 1ad7a96f774948fd7af938743343de03a98fc2ff Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <kwchuiaa@connect.ust.hk>
+Date: Fri, 24 Feb 2023 15:39:08 +0800
+Subject: [PATCH] (halium) libaudioclient: Avoid stalling audio recording on 
+ SCHED_* checks
+
+libaudioclient (responsible for polling buffers from micshm) waits up to half
+a second on checking whether real-time scheduling priority has been set or not.
+
+This has the unfortunate side-effect of stalling the audio record pipeline
+for as long as the check is done, over and over again, causing A/V desync.
+
+Remove the check altogether as there is no reason to stall audio recording
+while MPEG4Writer is doing its job fine. If the priority is set, it's set.
+If not, tough
+---
+ media/libaudioclient/AudioRecord.cpp | 20 --------------------
+ 1 file changed, 20 deletions(-)
+
+diff --git a/media/libaudioclient/AudioRecord.cpp b/media/libaudioclient/AudioRecord.cpp
+index 6bdf12fbd9..2e033ec712 100644
+--- a/media/libaudioclient/AudioRecord.cpp
++++ b/media/libaudioclient/AudioRecord.cpp
+@@ -1022,26 +1022,6 @@ ssize_t AudioRecord::read(void* buffer, size_t userSize, bool blocking)
+ nsecs_t AudioRecord::processAudioBuffer()
+ {
+     mLock.lock();
+-    if (mAwaitBoost) {
+-        mAwaitBoost = false;
+-        mLock.unlock();
+-        static const int32_t kMaxTries = 5;
+-        int32_t tryCounter = kMaxTries;
+-        uint32_t pollUs = 10000;
+-        do {
+-            int policy = sched_getscheduler(0) & ~SCHED_RESET_ON_FORK;
+-            if (policy == SCHED_FIFO || policy == SCHED_RR) {
+-                break;
+-            }
+-            usleep(pollUs);
+-            pollUs <<= 1;
+-        } while (tryCounter-- > 0);
+-        if (tryCounter < 0) {
+-            ALOGE("%s(%d): did not receive expected priority boost on time", __func__, mPortId);
+-        }
+-        // Run again immediately
+-        return 0;
+-    }
+ 
+     // Can only reference mCblk while locked
+     int32_t flags = android_atomic_and(~CBLK_OVERRUN, &mCblk->mFlags);
+-- 
+2.39.2
+
