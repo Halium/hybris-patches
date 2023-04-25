@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Thu, 23 Mar 2023 15:07:54 +0300
+Subject: [PATCH] (halium) allow libselinux_stubs.so to be loaded into vendor
+ processes
+
+There already is a change to add it to ll-ndk libraries in build/make,
+however it applies only if device is running current VNDK version.
+
+Do it here as well to be sure we can LD_PRELOAD libselinux_stubs.so
+into vndservicemanager.
+
+Change-Id: Ib07df3103b5d94d793fc90dacaeff5ee665107f0
+---
+ contents/namespace/vendordefault.cc | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/contents/namespace/vendordefault.cc b/contents/namespace/vendordefault.cc
+index b3be200..6c7ac9c 100644
+--- a/contents/namespace/vendordefault.cc
++++ b/contents/namespace/vendordefault.cc
+@@ -115,6 +115,10 @@ Namespace BuildVendorDefaultNamespace([[maybe_unused]] const Context& ctx) {
+           .AddSharedLib(Var("VNDK_USING_CORE_VARIANT_LIBRARIES"));
+     }
+   }
++
++  // Halium: allow loading libselinux_stubs.so from the system image
++  ns.GetLink(ctx.GetSystemNamespaceName()).AddSharedLib("libselinux_stubs.so");
++
+   ns.AddRequires(std::vector{"libneuralnetworks.so"});
+   return ns;
+ }
+-- 
+2.39.1
+
