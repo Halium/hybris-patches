@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Fri, 15 Dec 2023 20:32:01 +0000
+Subject: [PATCH] (halium) pcm_open: fixup stop_threshold==UINT_MAX in 64-bit
+ mode
+
+Some audio HALs set stop_threshold to UINT_MAX (> boundary)
+to disable automatic stop and keep looping in the circular buffer.
+
+Workaround this specific case when the code is compiled in 64-bit
+mode, as the boundary is computed by kernel to be less than LONG_MAX
+and may be larger than UINT_MAX.
+
+Prevents -EPIPE from SNDRV_PCM_IOCTL_START on modem PCM device
+on Volla Phone 22 during voice call mode configuration.
+
+Change-Id: I56dca56f54ceafafdf33f1879efa2f6a174ec299
+---
+ pcm.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/pcm.c b/pcm.c
+index 1709be9..0e7545b 100644
+--- a/pcm.c
++++ b/pcm.c
+@@ -1015,8 +1015,17 @@ struct pcm *pcm_open(unsigned int card, unsigned int device,
+             pcm->config.stop_threshold = sparams.stop_threshold =
+                 config->period_count * config->period_size;
+     }
+-    else
++    else {
+         sparams.stop_threshold = config->stop_threshold;
++#ifdef __LP64__
++        /* Halium: some audio HALs set stop_threshold to UINT_MAX (> boundary)
++         * to disable automatic stop and keep looping in the circular buffer.
++         * Fix this value when the code is compiled in 64-bit mode, as the
++         * boundary is computed by kernel to be less than LONG_MAX. */
++        if (sparams.stop_threshold == UINT_MAX)
++            sparams.stop_threshold = ULONG_MAX;
++#endif
++    }
+ 
+     if (!pcm->config.avail_min) {
+         if (pcm->flags & PCM_MMAP)
