@@ -1,0 +1,31 @@
+From 38e552b1d1748fb8231866356cdafce982baa154 Mon Sep 17 00:00:00 2001
+From: Bardia Moshiri <fakeshell@bardia.tech>
+Date: Tue, 19 Dec 2023 22:27:58 +0000
+Subject: [PATCH] (halium) binder: avoid failing on undeclared stability
+ setting
+
+Change-Id: I06d9eaf5857751bf5267dd88dba082f15d4ff5dc
+---
+ libs/binder/Stability.cpp | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/libs/binder/Stability.cpp b/libs/binder/Stability.cpp
+index f12ef4e..6affe27 100644
+--- a/libs/binder/Stability.cpp
++++ b/libs/binder/Stability.cpp
+@@ -144,10 +144,8 @@ status_t Stability::setRepr(IBinder* binder, int32_t representation, uint32_t fl
+     }
+ 
+     if (!isDeclaredLevel(setting.level)) {
+-        if (log) {
+-            ALOGE("Can only set known stability, not %u.", setting.level);
+-        }
+-        return BAD_TYPE;
++        // Halium hack to not fail on api32
++        return OK;
+     }
+ 
+     if (current == setting) return OK;
+-- 
+2.34.1
+
