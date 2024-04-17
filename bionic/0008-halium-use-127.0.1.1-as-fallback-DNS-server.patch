@@ -1,9 +1,9 @@
 From 3b2a10442c8a20ee6d38070d9823f49e5c09dc3d Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 5 Jul 2020 13:56:04 +0200
-Subject: [PATCH 8/8] (halium) use 127.0.1.1 as fallback DNS server
+Subject: [PATCH] (halium) use 127.0.0.53 as fallback DNS server
 
-Run by NetworkManager system in Ubuntu Touch. Needed to fix some
+Run by systemd-resolved in Ubuntu Touch. Needed to fix some
 Android-side daemons requiring internet access like vendor AGPS.
 
 Change-Id: I3c8dd8cb4d64d7632a853b12ff8c2f066534fcad
@@ -19,12 +19,12 @@ index 2fb2a3d..8b013fb 100644
  	}
  
  	memset(u, 0, sizeof(u));
-+// Halium - dnsmasq is listening at 127.0.1.1
++// Halium - systemd-resolved is listening at 127.0.0.53
 +#define USELOOPBACK
  #ifdef USELOOPBACK
  	u[nserv].sin.sin_addr = inet_makeaddr(IN_LOOPBACKNET, 1);
-+	// Ubuntu Touch specific - provided by NetworkManager
-+	u[nserv].sin.sin_addr.s_addr = inet_addr("127.0.1.1");
++	// Ubuntu Touch specific - provided by systemd-resolved
++	u[nserv].sin.sin_addr.s_addr = inet_addr("127.0.0.53");
  #else
  	u[nserv].sin.sin_addr.s_addr = INADDR_ANY;
  #endif
