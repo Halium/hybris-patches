@@ -1,0 +1,27 @@
+From 33ac5890c0e6a2f47ac138a5e98cbf4fd4a6b7ea Mon Sep 17 00:00:00 2001
+From: Herrie <Github.com@herrie.org>
+Date: Tue, 5 Mar 2024 09:58:45 +0100
+Subject: [PATCH] libcopybit: c2d2.h: Add missing YUV format
+
+Fixes build error on Sargo:
+
+hardware/qcom/sdm710/media/libc2dcolorconvert/C2DColorConverter.cpp:483:20: error: use of undeclared identifier 'C2D_COLOR_FORMAT_420_TP10'
+            return C2D_COLOR_FORMAT_420_TP10 | C2D_FORMAT_UBWC_COMPRESSED;
+
+Signed-off-by: Herman van Hazendonk <github.com@herrie.org>
+---
+ libcopybit/c2d2.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libcopybit/c2d2.h b/libcopybit/c2d2.h
+index 315a3ba5..821a6d57 100644
+--- a/libcopybit/c2d2.h
++++ b/libcopybit/c2d2.h
+@@ -207,6 +207,7 @@ typedef enum {
+     C2D_COLOR_FORMAT_422_Y42B     = 174,
+ 
+     C2D_COLOR_FORMAT_800_Y800     = 190,
++    C2D_COLOR_FORMAT_420_TP10     = 191,
+ 
+ } C2D_YUV_FORMAT;
+ 
