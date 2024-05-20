@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Mon, 16 May 2022 16:16:37 +0300
+Subject: [PATCH] (halium) init: load properties from (/system/etc)/prop.halium
+ last
+
+This can be used to override property values set in any other property
+files, including "ro." properties.
+
+Change-Id: I8445a6613a471444d5aace295ce049e3b88e19ed
+---
+ init/property_service.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/init/property_service.cpp b/init/property_service.cpp
+index 2691a8225..25f436b6d 100644
+--- a/init/property_service.cpp
++++ b/init/property_service.cpp
+@@ -936,6 +936,12 @@ void property_load_boot_defaults(bool load_debug_prop) {
+     load_properties_from_file("/product_services/build.prop", nullptr, &properties);
+     load_properties_from_file("/factory/factory.prop", "ro.*", &properties);
+ 
++    // Halium: load properties from prop.halium last for overrides
++    if (!load_properties_from_file("/system/etc/prop.halium", nullptr, &properties)) {
++        // Try recovery path
++        load_properties_from_file("/prop.halium", nullptr, &properties);
++    }
++
+     if (load_debug_prop) {
+         LOG(INFO) << "Loading " << kDebugRamdiskProp;
+         load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);
