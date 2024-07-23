@@ -1,0 +1,27 @@
+From 31fd6d57b7afe7b21ca9c7c9a9b0b36e7a6e65c4 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sun, 8 Aug 2021 18:46:22 +0200
+Subject: [PATCH] (halium) Fix sepolicy_test on macOS
+
+Based on: https://android-review.googlesource.com/c/platform/system/sepolicy/+/1173528
+
+Change-Id: Ifaf0bfeef34d586e36078f93d60b28aec6a254a7
+---
+ tests/Android.bp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tests/Android.bp b/tests/Android.bp
+index abb5e35..26b55b6 100644
+--- a/tests/Android.bp
++++ b/tests/Android.bp
+@@ -11,7 +11,6 @@ cc_library_host_shared {
+         "libbase",
+         "libsepol",
+     ],
+-    stl: "libc++_static",
+     sanitize: {
+         never: true,
+     },
+-- 
+2.30.1 (Apple Git-130)
+
