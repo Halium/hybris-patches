@@ -1,0 +1,39 @@
+From 439a8a6991b6ddf9971c608c589f0fd2e5130f1f Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Wed, 9 Oct 2024 13:13:52 +0000
+Subject: [PATCH] (halium) libstagefright: ignore missing
+ media.resource_manager service
+
+ResourceManagerService status wasn't checked until commit cf3bafbfe,
+and as the nullptr checks in proxy are still in place, do not abort
+codec initialization if the service is missing.
+
+Change-Id: Ica428d691bec8e88405fed74a84e905579fc4a9d
+---
+ media/libstagefright/MediaCodec.cpp | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/media/libstagefright/MediaCodec.cpp b/media/libstagefright/MediaCodec.cpp
+index e67a39e494..c33a3b15e7 100644
+--- a/media/libstagefright/MediaCodec.cpp
++++ b/media/libstagefright/MediaCodec.cpp
+@@ -321,11 +321,13 @@ MediaCodec::ResourceManagerServiceProxy::~ResourceManagerServiceProxy() {
+ }
+ 
+ status_t MediaCodec::ResourceManagerServiceProxy::init() {
+-    ::ndk::SpAIBinder binder(AServiceManager_getService("media.resource_manager"));
++    // Halium: use AServiceManager_checkService which does not block if not running
++    ::ndk::SpAIBinder binder(AServiceManager_checkService("media.resource_manager"));
+     mService = IResourceManagerService::fromBinder(binder);
+     if (mService == nullptr) {
+-        ALOGE("Failed to get ResourceManagerService");
+-        return UNKNOWN_ERROR;
++        // Halium: ignore missing ResourceManagerService
++        ALOGI("Failed to get ResourceManagerService");
++        return /* UNKNOWN_ERROR */ OK;
+     }
+ 
+     int callerPid = AIBinder_getCallingPid();
+-- 
+2.46.0
+
