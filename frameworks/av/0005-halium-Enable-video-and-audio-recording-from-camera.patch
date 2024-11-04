@@ -1,18 +1,19 @@
-From ce8e536ee829bd1154795432dafe6496b70c52dd Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Vo=C3=9F?= <thomas.voss.bochum@gmail.com>
 Date: Thu, 11 Feb 2016 15:43:33 +0100
-Subject: [PATCH 05/12] (halium) Enable video and audio recording from camera.
+Subject: [PATCH] (halium) Enable video and audio recording from camera.
 
 Change-Id: I8942df19db933f92b77d6aada74ac28245fa8961
 Signed-off-by: Ondrej Kubik <ondrej.kubik@canonical.com>
 ---
- media/libaudioclient/AudioRecord.cpp          | 27 +++++++++++++------
- .../libaudioclient/camera_record_service.cpp  | 21 ++++++++++-----
- .../include/media/camera_record_service.h     | 12 ++++++---
- 3 files changed, 42 insertions(+), 18 deletions(-)
+ media/libaudioclient/AudioRecord.cpp          | 33 ++++++++++++++-----
+ media/libaudioclient/AudioSystem.cpp          |  3 +-
+ .../libaudioclient/camera_record_service.cpp  | 21 ++++++++----
+ .../include/media/camera_record_service.h     | 12 +++++--
+ 4 files changed, 50 insertions(+), 19 deletions(-)
 
 diff --git a/media/libaudioclient/AudioRecord.cpp b/media/libaudioclient/AudioRecord.cpp
-index 7ced30a..a5bcabf 100644
+index 7ced30a..0045283 100644
 --- a/media/libaudioclient/AudioRecord.cpp
 +++ b/media/libaudioclient/AudioRecord.cpp
 @@ -392,7 +392,7 @@ status_t AudioRecord::set(
@@ -33,7 +34,7 @@ index 7ced30a..a5bcabf 100644
      return status;
  }
  
-@@ -855,17 +857,26 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
+@@ -855,17 +857,32 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
          return status;
      }
  
@@ -64,9 +65,29 @@ index 7ced30a..a5bcabf 100644
 +    output.sampleRate = mSampleRate;
 +    output.frameCount = mReqFrameCount;
 +    output.notificationFrameCount = mNotificationFramesReq;
++    output.serverConfig = {
++        .sample_rate = mSampleRate,
++        .channel_mask = mChannelMask,
++        .format = mFormat,
++    };
++    output.halConfig = output.serverConfig;
  
      ALOG_ASSERT(output.audioRecord != 0);
  
+diff --git a/media/libaudioclient/AudioSystem.cpp b/media/libaudioclient/AudioSystem.cpp
+index aa2ea71..b489d56 100644
+--- a/media/libaudioclient/AudioSystem.cpp
++++ b/media/libaudioclient/AudioSystem.cpp
+@@ -628,7 +628,8 @@ status_t AudioSystem::getRenderPosition(audio_io_handle_t output, uint32_t* halF
+ }
+ 
+ uint32_t AudioSystem::getInputFramesLost(audio_io_handle_t ioHandle) {
+-    const sp<IAudioFlinger> af = get_audio_flinger();
++    // Halium does not run AudioFlinger, so keep it nullptr
++    const sp<IAudioFlinger> af = nullptr; /* get_audio_flinger(); */
+     uint32_t result = 0;
+     if (af == 0) return result;
+     if (ioHandle == AUDIO_IO_HANDLE_NONE) return result;
 diff --git a/media/libaudioclient/camera_record_service.cpp b/media/libaudioclient/camera_record_service.cpp
 index 10fbb62..4f26f8f 100644
 --- a/media/libaudioclient/camera_record_service.cpp
@@ -196,6 +217,3 @@ index 8a4e7f5..eb544d1 100644
                                  uint32_t sampleRate,
                                  audio_format_t format,
                                  audio_channel_mask_t channelMask,
--- 
-2.45.2
-
