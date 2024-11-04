@@ -6,13 +6,13 @@ Subject: [PATCH] (halium) Enable video and audio recording from camera.
 Change-Id: I8942df19db933f92b77d6aada74ac28245fa8961
 Signed-off-by: Ondrej Kubik <ondrej.kubik@canonical.com>
 ---
- media/libaudioclient/AudioRecord.cpp          | 27 +++++++++++++------
- .../libaudioclient/camera_record_service.cpp  | 21 ++++++++++-----
- .../include/media/camera_record_service.h     | 12 ++++++---
- 3 files changed, 42 insertions(+), 18 deletions(-)
+ media/libaudioclient/AudioRecord.cpp          | 33 ++++++++++++++-----
+ .../libaudioclient/camera_record_service.cpp  | 21 ++++++++----
+ .../include/media/camera_record_service.h     | 12 +++++--
+ 3 files changed, 48 insertions(+), 18 deletions(-)
 
 diff --git a/media/libaudioclient/AudioRecord.cpp b/media/libaudioclient/AudioRecord.cpp
-index 77037bd..b86d664 100644
+index 77037bd..7365d3d 100644
 --- a/media/libaudioclient/AudioRecord.cpp
 +++ b/media/libaudioclient/AudioRecord.cpp
 @@ -462,7 +462,7 @@ status_t AudioRecord::set(
@@ -24,7 +24,15 @@ index 77037bd..b86d664 100644
      mSequence = 1;
      mObservedSequence = mSequence;
      mInOverrun = false;
-@@ -593,6 +593,8 @@ status_t AudioRecord::start(AudioSystem::sync_event_t event, audio_session_t tri
+@@ -562,6 +562,7 @@ status_t AudioRecord::start(AudioSystem::sync_event_t event, audio_session_t tri
+     mActive = true;
+ 
+     if (!(flags & CBLK_INVALID)) {
++        ALOGV("mAudioRecord->start()");
+         status = statusTFromBinderStatus(mAudioRecord->start(event, triggerSession));
+         if (status == DEAD_OBJECT) {
+             flags |= CBLK_INVALID;
+@@ -593,6 +594,8 @@ status_t AudioRecord::start(AudioSystem::sync_event_t event, audio_session_t tri
          // we've successfully started, log that time
          mMediaMetrics.logStart(systemTime());
      }
@@ -33,7 +41,7 @@ index 77037bd..b86d664 100644
      return status;
  }
  
-@@ -941,17 +943,26 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
+@@ -941,17 +944,31 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
          return status;
      }
  
@@ -64,6 +72,11 @@ index 77037bd..b86d664 100644
 +    output.sampleRate = mSampleRate;
 +    output.frameCount = mReqFrameCount;
 +    output.notificationFrameCount = mNotificationFramesReq;
++    output.serverConfig = {
++        .sample_rate = mSampleRate,
++        .channel_mask = mChannelMask,
++        .format = mFormat,
++    };
  
      ALOG_ASSERT(output.audioRecord != 0);
  
