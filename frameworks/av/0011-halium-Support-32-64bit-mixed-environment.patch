@@ -1,0 +1,72 @@
+From 1407908573e25324ac7963b6614e946d03273765 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sat, 7 Dec 2024 13:05:04 +0100
+Subject: [PATCH] (halium) Support 32+64bit mixed environment
+
+Codec2 can handle 64bit buffers when certain criteria are met.
+These criteria have been implemented in Android above 11 already,
+so apply two patches in order to enable the machinery.
+
+Patches applied:
+
+https: //android.googlesource.com/platform/frameworks/av/+/a222c0b28d5694e69cfd51b4758b30248799e39e%5E%21/#F0
+https: //android.googlesource.com/platform/frameworks/av/+/731e914f4945dc65e9d872f3303a6c21388fcf36%5E%21/#F0
+Change-Id: I691714ff4a18e0d446b40b76ff63285926ba5481
+---
+ media/codec2/sfplugin/Codec2Buffer.cpp | 26 +++++++++++++++++++++-----
+ 1 file changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/media/codec2/sfplugin/Codec2Buffer.cpp b/media/codec2/sfplugin/Codec2Buffer.cpp
+index 19414a0..7a07f43 100644
+--- a/media/codec2/sfplugin/Codec2Buffer.cpp
++++ b/media/codec2/sfplugin/Codec2Buffer.cpp
+@@ -18,6 +18,7 @@
+ #define LOG_TAG "Codec2Buffer"
+ #include <utils/Log.h>
+ 
++#include <android-base/properties.h>
+ #include <android/hardware/cas/native/1.0/types.h>
+ #include <android/hardware/drm/1.0/types.h>
+ #include <hidlmemory/FrameworkUtils.h>
+@@ -580,7 +581,26 @@ GraphicMetadataBuffer::GraphicMetadataBuffer(
+ }
+ 
+ std::shared_ptr<C2Buffer> GraphicMetadataBuffer::asC2Buffer() {
+-#ifndef __LP64__
++#ifdef __LP64__
++    static std::once_flag s_checkOnce;
++    static bool s_is64bitOk {true};
++    std::call_once(s_checkOnce, [&](){
++        const std::string abi32list =
++        ::android::base::GetProperty("ro.product.cpu.abilist32", "");
++        if (!abi32list.empty()) {
++            int32_t inputSurfaceSetting =
++            ::android::base::GetIntProperty("debug.stagefright.c2inputsurface", int32_t(0));
++            s_is64bitOk = inputSurfaceSetting != 0;
++        }
++    });
++
++    if (!s_is64bitOk) {
++        ALOGE("GraphicMetadataBuffer does not work in 32+64 system if compiled as 64-bit object"\
++              "when debug.stagefright.c2inputsurface is set to 0");
++        return nullptr;
++    }
++#endif
++
+     VideoNativeMetadata *meta = (VideoNativeMetadata *)base();
+     ANativeWindowBuffer *buffer = (ANativeWindowBuffer *)meta->pBuffer;
+     if (buffer == nullptr) {
+@@ -613,10 +633,6 @@ std::shared_ptr<C2Buffer> GraphicMetadataBuffer::asC2Buffer() {
+     }
+     return C2Buffer::CreateGraphicBuffer(
+             block->share(C2Rect(buffer->width, buffer->height), C2Fence()));
+-#else
+-    ALOGE("GraphicMetadataBuffer does not work on 64-bit arch");
+-    return nullptr;
+-#endif
+ }
+ 
+ // ConstGraphicBlockBuffer
+-- 
+2.43.0
+
