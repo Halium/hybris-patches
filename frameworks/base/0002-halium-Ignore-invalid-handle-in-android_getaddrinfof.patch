@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Fri, 19 Apr 2024 00:43:37 +0300
+Subject: [PATCH] (halium) Ignore invalid handle in
+ android_getaddrinfofornetwork
+
+Since we fallback to host systemd-resolved in bionic, specifying
+network ID doesn't make sense anyway and we can use NETID_UNSET.
+
+Change-Id: Ie7a89cb2a9963cc20be2d487dba34fcd5f94bb0e
+---
+ native/android/net.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/native/android/net.c b/native/android/net.c
+index a8104fc2..e9d1d267 100644
+--- a/native/android/net.c
++++ b/native/android/net.c
+@@ -77,8 +77,11 @@ int android_getaddrinfofornetwork(net_handle_t network,
+         const struct addrinfo *hints, struct addrinfo **res) {
+     unsigned netid;
+     if (!getnetidfromhandle(network, &netid)) {
++        /* Halium: ignore invalid handle since we use host DNS resolver
+         errno = EINVAL;
+         return EAI_SYSTEM;
++        */
++        netid = NETID_UNSET;
+     }
+ 
+     return android_getaddrinfofornet(node, service, hints, netid, 0, res);
+-- 
+2.42.0
