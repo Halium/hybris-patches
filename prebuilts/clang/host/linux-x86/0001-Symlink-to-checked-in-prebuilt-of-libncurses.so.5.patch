@@ -1,0 +1,33 @@
+From 81f5456b250645c484897854f0d6b5f58b9a5143 Mon Sep 17 00:00:00 2001
+From: Stephen Hines <srhines@google.com>
+Date: Fri, 22 Sep 2023 16:49:59 -0700
+Subject: [PATCH] Symlink to checked-in prebuilt of libncurses.so.5
+
+libncurses.so.5 is an older dependency of the RenderScript Clang, but it
+is also likely to continue being removed by newer versions of Linux. As
+part of the RenderScript deprecation, this is part of a 2 step process
+to remove the legacy RenderScript Clang. For part one, I'm switching our
+dependency over to a checked-in prebuilt of the ncurses5 library. Next,
+I'll create a final set of RenderScript runtime libraries using this
+Clang on a buildbot, and document how we would regenerate them if needed
+in the future.
+
+Bug: http://b/301495450
+Test: sudo apt remove libncurses5; cd frameworks/rs/driver/runtime && mm
+Change-Id: I3b0d4f09e44f5b46d4ae6362af86d22619dcf2c3
+---
+ clang-3289846/lib64/libncurses.so.5 | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 120000 clang-3289846/lib64/libncurses.so.5
+
+diff --git a/clang-3289846/lib64/libncurses.so.5 b/clang-3289846/lib64/libncurses.so.5
+new file mode 120000
+index 000000000..c22297891
+--- /dev/null
++++ b/clang-3289846/lib64/libncurses.so.5
+@@ -0,0 +1 @@
++../../../../../gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/sysroot/usr/lib/libncurses.so.5
+\ No newline at end of file
+-- 
+2.41.0.windows.3
+
