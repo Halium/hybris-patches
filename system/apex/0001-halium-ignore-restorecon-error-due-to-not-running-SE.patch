@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Sun, 10 Aug 2025 16:42:55 +0000
+Subject: [PATCH] (halium) apexd: ignore restorecon error
+
+Change-Id: I138dbe22e42a7b496c33ec164b86f9b90f3e773c
+---
+ apexd/apexd_utils.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/apexd/apexd_utils.h b/apexd/apexd_utils.h
+index 782bd2f..baf3f17 100644
+--- a/apexd/apexd_utils.h
++++ b/apexd/apexd_utils.h
+@@ -329,7 +329,8 @@ inline android::base::Result<uintmax_t> GetFileSize(
+ inline android::base::Result<void> RestoreconPath(const std::string& path) {
+   unsigned int seflags = SELINUX_ANDROID_RESTORECON_RECURSE;
+   if (selinux_android_restorecon(path.c_str(), seflags) < 0) {
+-    return android::base::ErrnoError() << "Failed to restorecon " << path;
++    // Halium: ignore possible restorecon error due to not running SELinux
++    // return android::base::ErrnoError() << "Failed to restorecon " << path;
+   }
+   return {};
+ }
