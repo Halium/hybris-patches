@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Fri, 29 Aug 2025 09:37:34 +0000
+Subject: [PATCH] (halium) camera: implement halium.camera.retain_logical_ids
+
+Setting this property to comma-separated camera IDs will prevent
+them from being removed in filterLogicalCameraIdsLocked().
+
+This is a workaround for a bug in camera HAL-provided values
+in a library from recent Volla Phone Quintus BSP.
+
+Change-Id: I065f0335dec8d91a54add558e3de634c68b546b9
+---
+ .../common/CameraProviderManager.cpp          | 32 +++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/services/camera/libcameraservice/common/CameraProviderManager.cpp b/services/camera/libcameraservice/common/CameraProviderManager.cpp
+index 43f92a9927..bf6cffd308 100644
+--- a/services/camera/libcameraservice/common/CameraProviderManager.cpp
++++ b/services/camera/libcameraservice/common/CameraProviderManager.cpp
+@@ -23,7 +23,9 @@
+ #include <aidl/android/hardware/camera/device/ICameraDevice.h>
+ 
+ #include <algorithm>
++#include <cctype>
+ #include <chrono>
++#include <sstream>
+ #include "common/DepthPhotoProcessor.h"
+ #include "hidl/HidlProviderInfo.h"
+ #include "aidl/AidlProviderInfo.h"
+@@ -2759,6 +2761,25 @@ status_t CameraProviderManager::getCameraCharacteristicsLocked(const std::string
+ void CameraProviderManager::filterLogicalCameraIdsLocked(
+         std::vector<std::string>& deviceIds) const
+ {
++    // Check for property to prevent specific IDs from being filtered
++    std::vector<std::string> retainIds;
++    char retainIdsProp[PROPERTY_VALUE_MAX];
++    if (property_get("halium.camera.retain_logical_ids", retainIdsProp, "") > 0) {
++        std::string retainIdsStr(retainIdsProp);
++        std::stringstream ss(retainIdsStr);
++        std::string token;
++        while (std::getline(ss, token, ',')) {
++            // Trim whitespace
++            token.erase(token.begin(), std::find_if(token.begin(), token.end(),
++                          [](unsigned char ch) { return !std::isspace(ch); }));
++            token.erase(std::find_if(token.rbegin(), token.rend(),
++                          [](unsigned char ch) { return !std::isspace(ch); }).base(), token.end());
++            if (!token.empty()) {
++                retainIds.push_back(token);
++            }
++        }
++    }
++
+     // Map between camera facing and camera IDs related to logical camera.
+     std::map<int, std::unordered_set<std::string>> idCombos;
+ 
+@@ -2800,6 +2821,17 @@ void CameraProviderManager::filterLogicalCameraIdsLocked(
+             removedIds.erase(foundId);
+             break;
+         }
++
++        // Remove IDs from the retain list from the removal set
++        for (const auto& retainId : retainIds) {
++            auto it = removedIds.find(retainId);
++            if (it != removedIds.end()) {
++                ALOGI("%s: Retaining ID %s due to halium.camera.retain_logical_ids setting",
++                    __FUNCTION__, retainId.c_str());
++                removedIds.erase(it);
++            }
++        }
++
+         deviceIds.erase(std::remove_if(deviceIds.begin(), deviceIds.end(),
+                 [&removedIds](const std::string& s) {
+                 return removedIds.find(s) != removedIds.end();}),
