@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Thu, 4 Dec 2025 11:09:55 +0200
+Subject: [PATCH] (ubports) fs_mgr: prefer LVM userdata devnode if device was
+ migrated
+
+Change-Id: Iec4d18c0a8b83035e17e74a6c0af9941dbd0623f
+---
+ fs_mgr/fs_mgr_fstab.cpp | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/fs_mgr/fs_mgr_fstab.cpp b/fs_mgr/fs_mgr_fstab.cpp
+index a030697..e29857f 100644
+--- a/fs_mgr/fs_mgr_fstab.cpp
++++ b/fs_mgr/fs_mgr_fstab.cpp
+@@ -754,6 +754,26 @@ bool ReadDefaultFstab(Fstab* fstab) {
+         fstab->emplace_back(std::move(entry));
+     }
+ 
++    // UBPorts: workaround for devices migrated to LVM: if the LVM userdata volume
++    // is present, use it instead of the original block device
++    constexpr const char* kLvmUserdataPaths[] = {
++        "/dev/block/mapper/ubuntu--userdata",
++        "/dev/block/mapper/ubports--userdata",
++    };
++    for (const char* lvm_path : kLvmUserdataPaths) {
++        if (access(lvm_path, F_OK) == 0) {
++            for (auto& entry : *fstab) {
++                if (entry.mount_point == "/data") {
++                    LINFO << __FUNCTION__ << "(): LVM userdata detected, overriding "
++                          << entry.blk_device << " with " << lvm_path;
++                    entry.blk_device = lvm_path;
++                    break;
++                }
++            }
++            break;
++        }
++    }
++
+     return !fstab->empty();
+ }
+ 
