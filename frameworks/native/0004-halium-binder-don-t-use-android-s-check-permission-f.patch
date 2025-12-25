@@ -13,11 +13,11 @@ Signed-off-by: Ondrej Kubik <ondrej.kubik@canonical.com>
  2 files changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/cmds/servicemanager/ServiceManager.cpp b/cmds/servicemanager/ServiceManager.cpp
-index a828b52..4f1d0a0 100644
+index 38a125b..6a593f4 100644
 --- a/cmds/servicemanager/ServiceManager.cpp
 +++ b/cmds/servicemanager/ServiceManager.cpp
-@@ -410,9 +410,10 @@ bool isValidServiceName(const std::string& name) {
- Status ServiceManager::addService(const std::string& name, const sp<IBinder>& binder, bool allowIsolated, int32_t dumpPriority) {
+@@ -506,9 +506,10 @@ Status ServiceManager::addService(const std::string& name, const sp<IBinder>& bi
+ 
      auto ctx = mAccess->getCallingContext();
  
 -    if (multiuser_get_app_id(ctx.uid) >= AID_APP) {
@@ -27,8 +27,8 @@ index a828b52..4f1d0a0 100644
 -    }
 +    }*/
  
-     if (!mAccess->canAdd(ctx, name)) {
-         return Status::fromExceptionCode(Status::EX_SECURITY, "SELinux denied.");
+     std::optional<std::string> accessorName;
+     if (auto status = canAddService(ctx, name, &accessorName); !status.isOk()) {
 diff --git a/libs/binder/IServiceManager.cpp b/libs/binder/IServiceManager.cpp
 index 39573ec..00daca0 100644
 --- a/libs/binder/IServiceManager.cpp

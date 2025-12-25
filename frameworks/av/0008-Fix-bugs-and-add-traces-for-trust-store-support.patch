@@ -9,7 +9,7 @@ Change-Id: Ia6312354e1a6111e3016829d2edb7e2804639b98
  1 file changed, 56 insertions(+), 9 deletions(-)
 
 diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
-index 993cd28..30cc5c8 100644
+index d96fdef..c57ecaa 100644
 --- a/services/camera/libcameraservice/CameraService.cpp
 +++ b/services/camera/libcameraservice/CameraService.cpp
 @@ -21,7 +21,9 @@
@@ -31,7 +31,7 @@ index 993cd28..30cc5c8 100644
  
  #include <aidl/AidlCameraService.h>
  #include <android-base/macros.h>
-@@ -130,6 +133,19 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -157,6 +160,19 @@ struct TrustAgentRegistry : public android::Thread,
      {
          static const int socketErrorCode = -1;
  
@@ -51,16 +51,7 @@ index 993cd28..30cc5c8 100644
          // We create a unix domain socket
          socketFd = ::socket(PF_UNIX, SOCK_STREAM, 0);
  
-@@ -152,7 +168,7 @@ struct TrustAgentRegistry : public android::Thread,
- 
-         // And bind to the endpoint in the filesystem.
-         static const int bindErrorCode = -1;
--        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));        
-+        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));
- 
-         if (rc == bindErrorCode)
-         {
-@@ -205,6 +221,8 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -232,6 +248,8 @@ struct TrustAgentRegistry : public android::Thread,
          static const int keepOn = 1;
          static const int bailOut = 0;
  
@@ -69,7 +60,7 @@ index 993cd28..30cc5c8 100644
          if (fd != socketFd)
              return keepOn;
  
-@@ -239,6 +257,7 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -266,6 +284,7 @@ struct TrustAgentRegistry : public android::Thread,
              ALOGE("Could not query peer credentials");
          } else
          {
@@ -77,27 +68,27 @@ index 993cd28..30cc5c8 100644
              android::AutoMutex am(remoteAgentsGuard);
              remoteAgents.add(peerCredentials.uid, connectionFd);
          }
-@@ -249,9 +268,17 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -276,9 +295,17 @@ struct TrustAgentRegistry : public android::Thread,
      // From android::Thread
      bool threadLoop()
      {
 -        static const int timeoutInMs = 5000;
 +        static const int timeoutInMs = -1;
 +        int res;
-+
+ 
+-        looper->pollOnce(timeoutInMs);
 +        ALOGD("%s start", __PRETTY_FUNCTION__);
 +
 +        do {
 +            res = looper->pollOnce(timeoutInMs);
 +            ALOGD("%s res %d", __PRETTY_FUNCTION__, res);
 +        } while(res != ALOOPER_POLL_ERROR);
- 
--        looper->pollOnce(timeoutInMs);
++
 +        ALOGD("%s exit", __PRETTY_FUNCTION__);
  
          return exitPending();
      }
-@@ -260,25 +287,40 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -287,25 +314,40 @@ struct TrustAgentRegistry : public android::Thread,
      {
          int socket = -1;
  
@@ -142,7 +133,7 @@ index 993cd28..30cc5c8 100644
  
          return answerFromSocket == granted;
      }
-@@ -287,6 +329,7 @@ struct TrustAgentRegistry : public android::Thread,
+@@ -314,6 +356,7 @@ struct TrustAgentRegistry : public android::Thread,
      android::sp<android::Looper> looper;
      android::Mutex remoteAgentsGuard;
      android::KeyedVector<uid_t, int> remoteAgents;
@@ -150,19 +141,19 @@ index 993cd28..30cc5c8 100644
  };
  
  android::sp<TrustAgentRegistry> trust_agent_registry(new TrustAgentRegistry("/dev/socket/camera_service/camera_service_to_trust"));
-@@ -2008,7 +2051,11 @@ Status CameraService::validateClientPermissionsLocked(const std::string& cameraI
-         // verify that the app with uid and pid is allowed to access the
-         // camera.
-         if (!trust_agent_registry->verifyConnectRequestFor(clientUid, callingPid))
--            return PERMISSION_DENIED;
-+            return STATUS_ERROR_FMT(ERROR_PERMISSION_DENIED,
-+                    "Untrusted caller (calling PID %d, UID %d) trying to "
-+                    "forward camera access to camera %s for client %s (PID %d, UID %d)",
-+                    callingPid, callingUid, cameraId.c_str(),
-+                    clientName.c_str(), clientUid, clientPid);
-     } else if (!isTrustedCallingUid(callingUid)) {
-         ALOGE("CameraService::connect X (calling PID %d, calling UID %d) rejected "
-                 "(don't trust clientUid %d)", callingPid, callingUid, clientUid);
+@@ -1964,7 +2007,11 @@ Status CameraService::validateClientPermissionsLocked(
+     // verify that the app with uid and pid is allowed to access the
+     // camera.
+     if (!trust_agent_registry->verifyConnectRequestFor(clientUid, callingPid))
+-        return PERMISSION_DENIED;
++        return STATUS_ERROR_FMT(ERROR_PERMISSION_DENIED,
++                "Untrusted caller (calling PID %d, UID %d) trying to "
++                "forward camera access to camera %s for client %s (PID %d, UID %d)",
++                callingPid, callingUid, cameraId.c_str(),
++                clientName.c_str(), clientUid, clientPid);
+ 
+     if (shouldRejectSystemCameraConnection(cameraId)) {
+         ALOGW("Attempting to connect to system-only camera id %s, connection rejected",
 -- 
 2.45.2
 

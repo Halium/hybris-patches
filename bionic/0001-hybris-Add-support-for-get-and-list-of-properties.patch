@@ -6,22 +6,22 @@ Subject: [PATCH 1/9] (hybris) Add support for get and list of properties.
 
 Change-Id: I089a2a146c06d8ad0c234f0a9a4b5aa07beaeed5
 ---
- libc/include/sys/_system_properties.h | 2 ++
+ libc/include/sys/system_properties.h | 2 ++
  1 file changed, 2 insertions(+)
 
-diff --git a/libc/include/sys/_system_properties.h b/libc/include/sys/_system_properties.h
-index 078e857..95fa58f 100644
---- a/libc/include/sys/_system_properties.h
-+++ b/libc/include/sys/_system_properties.h
-@@ -45,6 +45,8 @@ __BEGIN_DECLS
- #define PROP_DIRNAME "/dev/__properties__"
+diff --git a/libc/include/sys/system_properties.h b/libc/include/sys/system_properties.h
+index 1303079..7bbcf0b 100644
+--- a/libc/include/sys/system_properties.h
++++ b/libc/include/sys/system_properties.h
+@@ -185,6 +185,8 @@ int __system_properties_init(void);
  
+ // Messages sent to init.
  #define PROP_MSG_SETPROP 1
 +#define PROP_MSG_GETPROP 2
 +#define PROP_MSG_LISTPROP 3
  #define PROP_MSG_SETPROP2 0x00020001
  
- #define PROP_SUCCESS 0
+ // Status codes returned by init (but not passed from libc to the caller).
 -- 
 2.45.2
 

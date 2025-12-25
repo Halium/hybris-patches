@@ -18,10 +18,10 @@ Signed-off-by: Thomas Voß <thomas.voss@canonical.com>
  1 file changed, 203 insertions(+)
 
 diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
-index 1dca676..993cd28 100644
+index fdb5b7d..d96fdef 100644
 --- a/services/camera/libcameraservice/CameraService.cpp
 +++ b/services/camera/libcameraservice/CameraService.cpp
-@@ -63,7 +63,9 @@
+@@ -64,7 +64,9 @@
  #include <mediautils/BatteryNotifier.h>
  #include <processinfo/ProcessInfoService.h>
  #include <utils/Errors.h>
@@ -31,9 +31,9 @@ index 1dca676..993cd28 100644
  #include <utils/String16.h>
  #include <utils/SystemClock.h>
  #include <utils/Trace.h>
-@@ -94,6 +96,202 @@ namespace {
-     const char* kProcessInfoServiceName = "processinfo";
- }; // namespace anonymous
+@@ -121,6 +123,202 @@ namespace {
+     }
+ } // namespace anonymous
  
 +#include <stdint.h>
 +
@@ -91,7 +91,7 @@ index 1dca676..993cd28 100644
 +
 +        // And bind to the endpoint in the filesystem.
 +        static const int bindErrorCode = -1;
-+        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));        
++        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));
 +
 +        if (rc == bindErrorCode)
 +        {
@@ -234,18 +234,19 @@ index 1dca676..993cd28 100644
  namespace android {
  
  using namespace camera3;
-@@ -1806,6 +2004,11 @@ Status CameraService::validateClientPermissionsLocked(const std::string& cameraI
-     // Check if we can trust clientUid
-     if (clientUid == USE_CALLING_UID) {
-         clientUid = callingUid;
-+        // We try to reach out to a remote trust store instance to
-+        // verify that the app with uid and pid is allowed to access the
-+        // camera.
-+        if (!trust_agent_registry->verifyConnectRequestFor(clientUid, callingPid))
-+            return PERMISSION_DENIED;
-     } else if (!isTrustedCallingUid(callingUid)) {
-         ALOGE("CameraService::connect X (calling PID %d, calling UID %d) rejected "
-                 "(don't trust clientUid %d)", callingPid, callingUid, clientUid);
+@@ -1762,6 +1960,12 @@ Status CameraService::validateClientPermissionsLocked(
+     int clientUid = clientAttribution.uid;
+     const std::string clientName = clientAttribution.packageName.value_or(kUnknownPackageName);
+ 
++    // We try to reach out to a remote trust store instance to
++    // verify that the app with uid and pid is allowed to access the
++    // camera.
++    if (!trust_agent_registry->verifyConnectRequestFor(clientUid, callingPid))
++        return PERMISSION_DENIED;
++
+     if (shouldRejectSystemCameraConnection(cameraId)) {
+         ALOGW("Attempting to connect to system-only camera id %s, connection rejected",
+                 cameraId.c_str());
 -- 
 2.45.2
 

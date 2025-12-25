@@ -54,7 +54,7 @@ index 7ced30a..a5bcabf 100644
 -    if (output.audioRecord == 0 || status != NO_ERROR) {
 +    if (recording.ar == 0 || status != NO_ERROR) {
          ALOGE("CameraRecordService could not create record track, status: %d", status);
-         goto exit;
+         return status;
      }
 +    output.audioRecord = recording.ar;
 +    output.cblk = recording.cblk;

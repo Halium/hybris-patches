@@ -1,0 +1,32 @@
+From 637688ba5a876cc3b815120d2d594e2db33a6626 Mon Sep 17 00:00:00 2001
+From: Azkali <a.ffcc7@gmail.com>
+Date: Thu, 25 Dec 2025 21:33:32 +0700
+Subject: [PATCH] (halium) Disable lineage bootanimation
+
+Change-Id: Id5881ba5f86f512ffcc211cdf733f5ee952a71e7
+---
+ bootanimation/Android.bp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/bootanimation/Android.bp b/bootanimation/Android.bp
+index bcd8e3f..0cd0d80 100644
+--- a/bootanimation/Android.bp
++++ b/bootanimation/Android.bp
+@@ -2,7 +2,7 @@
+ // SPDX-FileCopyrightText: The LineageOS Project
+ // SPDX-License-Identifier: Apache-2.0
+ //
+-
++/*
+ genrule {
+     name: "gen-bootanimation.zip",
+     tools: [
+@@ -58,4 +58,4 @@ install_symlink {
+     product_specific: true,
+     installed_location: "media/bootanimation-dark.zip",
+     symlink_target: "bootanimation.zip",
+-}
++}*/
+-- 
+2.52.0
+

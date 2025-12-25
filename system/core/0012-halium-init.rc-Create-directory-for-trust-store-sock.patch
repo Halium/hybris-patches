@@ -11,12 +11,12 @@ Change-Id: I322d3743a85d55273cf90e78faf662e53c6a1376
 ---
  rootdir/init.rc | 5 +++++
  1 file changed, 5 insertions(+)
-
+ 
 diff --git a/rootdir/init.rc b/rootdir/init.rc
-index 85a2118..e931c39 100644
+index ba10791..d398599 100644
 --- a/rootdir/init.rc
 +++ b/rootdir/init.rc
-@@ -492,6 +492,11 @@ on init
+@@ -503,6 +503,11 @@ on init
      start hwservicemanager
      start vndservicemanager
  
@@ -25,9 +25,10 @@ index 85a2118..e931c39 100644
 +    chown root camera /dev/socket/camera_service
 +    chmod 0775 /dev/socket/camera_service
 +
- # Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
- import /system/etc/init/hw/init.boringssl.${ro.zygote}.rc
- 
+     # Mount /mnt/vm ASAP to allow early VMs to run.
+     mkdir /mnt/vm 0755 root root
+     mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw
+
 -- 
 2.45.2
 
