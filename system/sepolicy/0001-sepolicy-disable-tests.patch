@@ -1,0 +1,41 @@
+From 84ee442a251ff89989e6ac56dc79bd9b360cad9a Mon Sep 17 00:00:00 2001
+From: Alexander Martinz <amartinz@shiftphones.com>
+Date: Tue, 22 Mar 2022 19:11:55 +0100
+Subject: [PATCH] sepolicy: disable tests
+
+Change-Id: I207bd8c63d82b8856969bb78955d342b4fb8ae02
+Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
+---
+ Android.mk | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/Android.mk b/Android.mk
+index dadd7b0a6..1e7cffcd3 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -238,14 +238,14 @@ LOCAL_REQUIRED_MODULES += \
+ 
+ endif # ($(PRODUCT_SEPOLICY_SPLIT),true)
+ 
+-ifneq ($(with_asan),true)
+-ifneq ($(SELINUX_IGNORE_NEVERALLOWS),true)
+-LOCAL_REQUIRED_MODULES += \
+-    sepolicy_tests \
+-    $(addprefix treble_sepolicy_tests_,$(PLATFORM_SEPOLICY_COMPAT_VERSIONS)) \
+-
+-endif
+-endif
++#ifneq ($(with_asan),true)
++#ifneq ($(SELINUX_IGNORE_NEVERALLOWS),true)
++#LOCAL_REQUIRED_MODULES += \
++#    sepolicy_tests \
++#    $(addprefix treble_sepolicy_tests_,$(PLATFORM_SEPOLICY_COMPAT_VERSIONS)) \
++#
++#endif
++#endif
+ 
+ ifneq ($(PLATFORM_SEPOLICY_VERSION),$(TOT_SEPOLICY_VERSION))
+ LOCAL_REQUIRED_MODULES += \
+-- 
+2.35.1
+
