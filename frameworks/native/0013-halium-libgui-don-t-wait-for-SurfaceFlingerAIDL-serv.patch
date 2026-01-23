@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Fri, 23 Jan 2026 16:25:18 +0200
+Subject: [PATCH] (halium) libgui: don't wait for SurfaceFlingerAIDL service
+
+Change-Id: I5667c7abe515eff7896daa50303693b2578fff3d
+---
+ libs/gui/SurfaceComposerClient.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libs/gui/SurfaceComposerClient.cpp b/libs/gui/SurfaceComposerClient.cpp
+index 2e59dbe..82a4b82 100644
+--- a/libs/gui/SurfaceComposerClient.cpp
++++ b/libs/gui/SurfaceComposerClient.cpp
+@@ -149,7 +149,10 @@ ComposerServiceAIDL::ComposerServiceAIDL() : Singleton<ComposerServiceAIDL>() {
+ 
+ bool ComposerServiceAIDL::connectLocked() {
+     const String16 name("SurfaceFlingerAIDL");
+-    mComposerService = waitForService<gui::ISurfaceComposer>(name);
++    /* Halium: we don't have SurfaceFlinger service, so don't wait for it */
++    /* mComposerService = waitForService<gui::ISurfaceComposer>(name); */
++    sp<IServiceManager> sm = defaultServiceManager();
++    mComposerService = interface_cast<gui::ISurfaceComposer>(sm->checkService(name));
+     if (mComposerService == nullptr) {
+         return false; // fatal error or permission problem
+     }
