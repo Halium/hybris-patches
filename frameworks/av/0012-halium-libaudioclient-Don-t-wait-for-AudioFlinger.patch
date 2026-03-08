@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: berbascum <berbascum@ticv.cat>
+Date: Tue, 3 Mar 2026 19:23:15 +0100
+Subject: [PATCH] (halium) libaudioclient: Don't wait for AudioFlinger
+
+Halium does not run AudioFlinger, recording goes through
+CameraRecordService. get_audio_flinger() waited for it in an endless
+loop, so stopping a video recording with audio hung in
+AudioRecord::~AudioRecord. Return null instead, callers handle it.
+
+Change-Id: I8ca502c96c30f46bd43b0286f6a9993e64abca3e
+Signed-off-by: berbascum <berbascum@ticv.cat>
+---
+ media/libaudioclient/AudioSystem.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/media/libaudioclient/AudioSystem.cpp b/media/libaudioclient/AudioSystem.cpp
+index d84c49e..f6f2389 100644
+--- a/media/libaudioclient/AudioSystem.cpp
++++ b/media/libaudioclient/AudioSystem.cpp
+@@ -58,6 +58,10 @@ sp<CaptureStateListenerImpl> gSoundTriggerCaptureStateListener = nullptr;
+ // establish binder interface to AudioFlinger service
+ const sp<IAudioFlinger> AudioSystem::get_audio_flinger()
+ {
++    // Halium does not run AudioFlinger, recording goes through
++    // CameraRecordService. Waiting for it below would block forever.
++    return nullptr;
++
+     sp<IAudioFlinger> af;
+     sp<AudioFlingerClient> afc;
+     bool reportNoError = false;
