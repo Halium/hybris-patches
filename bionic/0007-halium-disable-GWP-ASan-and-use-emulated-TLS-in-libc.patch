@@ -1,7 +1,7 @@
-From 89ca22589deb171055e5b159ea0d3cd513e68e85 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Fri, 21 Apr 2023 10:35:49 +0500
-Subject: [PATCH 7/9] (halium) disable GWP-ASan and use emulated TLS in libc by
+Subject: [PATCH] (halium) disable GWP-ASan and use emulated TLS in libc by
  default
 
 Building locale.cpp with platform TLS and disabled direct TLS slot
@@ -14,10 +14,10 @@ Change-Id: Id32a4b6624940f3130b1200bb4b2ef836130876b
  2 files changed, 22 insertions(+)
 
 diff --git a/libc/Android.bp b/libc/Android.bp
-index 990c8bc..cdd27a4 100644
+index acea5c9a1..8094a135d 100644
 --- a/libc/Android.bp
 +++ b/libc/Android.bp
-@@ -42,6 +42,9 @@ libc_common_flags = [
+@@ -40,6 +40,9 @@ libc_common_flags = [
      // __dso_handle needs to have default visibility on ARM32. See b/73485611.
      "-Wexit-time-destructors",
  
@@ -28,10 +28,10 @@ index 990c8bc..cdd27a4 100644
      // never see any good it does, so let's just ask it to do what we say...
      // (The specific motivating example was clang turning a loop that would only
 diff --git a/libc/bionic/gwp_asan_wrappers.cpp b/libc/bionic/gwp_asan_wrappers.cpp
-index 251633d..ce888f0 100644
+index d416775fa..cdf257685 100644
 --- a/libc/bionic/gwp_asan_wrappers.cpp
 +++ b/libc/bionic/gwp_asan_wrappers.cpp
-@@ -54,6 +54,7 @@
+@@ -55,6 +55,7 @@
  #include "bionic/malloc_common_dynamic.h"
  #endif  // LIBC_STATIC
  
@@ -39,7 +39,7 @@ index 251633d..ce888f0 100644
  static gwp_asan::GuardedPoolAllocator GuardedAlloc;
  static const MallocDispatch* prev_dispatch;
  
-@@ -501,6 +502,24 @@ bool DispatchIsGwpAsan(const MallocDispatch* dispatch) {
+@@ -497,6 +498,24 @@ bool DispatchIsGwpAsan(const MallocDispatch* dispatch) {
    return dispatch == &gwp_asan_dispatch;
  }
  
@@ -64,6 +64,3 @@ index 251633d..ce888f0 100644
  bool EnableGwpAsan(const android_mallopt_gwp_asan_options_t& options) {
    if (GwpAsanInitialized) {
      return true;
--- 
-2.45.2
-

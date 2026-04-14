@@ -1,8 +1,8 @@
-From 057c098b226173e52f05da9f63c218774ce6ace3 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Simonas Leleiva <simonas.leleiva@meramo.co.uk>
 Date: Wed, 15 Jul 2015 08:29:08 +0000
-Subject: [PATCH 02/12] (hybris) Pick GLES shared objects from appropriate
- paths (32-bit case)
+Subject: [PATCH] (hybris) Pick GLES shared objects from appropriate paths
+ (32-bit case)
 
 Change-Id: I4c7739ba8a4d64fa115163d5700b0df3370b286b
 Signed-off-by: Simonas Leleiva <simonas.leleiva@jollamobile.com>
@@ -11,10 +11,10 @@ Signed-off-by: Simonas Leleiva <simonas.leleiva@jollamobile.com>
  1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/opengl/libs/EGL/Loader.cpp b/opengl/libs/EGL/Loader.cpp
-index 9dea4eb..92917ec 100644
+index 567022c12f..481fc2aa25 100644
 --- a/opengl/libs/EGL/Loader.cpp
 +++ b/opengl/libs/EGL/Loader.cpp
-@@ -57,9 +57,9 @@ namespace android {
+@@ -58,9 +58,9 @@ namespace android {
  
  #ifndef SYSTEM_LIB_PATH
  #if defined(__LP64__)
@@ -26,7 +26,7 @@ index 9dea4eb..92917ec 100644
  #endif
  #endif
  
-@@ -339,13 +339,13 @@ void* Loader::open(egl_connection_t* cnx) {
+@@ -347,13 +347,13 @@ void* Loader::open(egl_connection_t* cnx) {
                          HAL_SUBNAME_KEY_PROPERTIES[2]);
  
      if (!cnx->libEgl) {
@@ -43,6 +43,3 @@ index 9dea4eb..92917ec 100644
      }
  
      if (!cnx->libEgl || !cnx->libGles2 || !cnx->libGles1) {
--- 
-2.45.2
-

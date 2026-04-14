@@ -1,4 +1,4 @@
-From 3b6105b4a877704fbe18791ccbf1f073f0b9cc64 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <thekit@disroot.org>
 Date: Thu, 23 Mar 2023 15:07:54 +0300
 Subject: [PATCH] (halium) allow libselinux_stubs.so to be loaded into vendor
@@ -29,6 +29,3 @@ index a866839..58fd333 100644
    ns.AddRequires(ctx.GetVendorRequireLibs());
    ns.AddProvides(ctx.GetVendorProvideLibs());
    return ns;
--- 
-2.45.2
-

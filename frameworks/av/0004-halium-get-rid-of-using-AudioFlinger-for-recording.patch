@@ -1,7 +1,7 @@
-From dfbabed8b0588cea601a085c3b81f10924011d9d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jim Hodapp <jim.hodapp@canonical.com>
 Date: Thu, 10 Jul 2014 16:59:31 -0400
-Subject: [PATCH 04/12] (halium) get rid of using AudioFlinger for recording
+Subject: [PATCH] (halium) get rid of using AudioFlinger for recording
 
 Replace it with custom RecordThread, RecordTrack and RecordHandle implementations
 
@@ -21,25 +21,25 @@ Change-Id: If4404ff15f543534a67a0661a753935bc5eff30e
 ---
  include/private/media/AudioTrackShared.h      |  13 +-
  media/libaudioclient/Android.bp               |   9 +
- media/libaudioclient/AudioRecord.cpp          |  52 +-
+ media/libaudioclient/AudioRecord.cpp          |  68 +-
  media/libaudioclient/AudioSystem.cpp          |  94 ++-
  media/libaudioclient/AudioTrackShared.cpp     |  15 +
  .../libaudioclient/camera_record_service.cpp  | 294 +++++++++
  .../include/media/AudioSystem.h               |   9 +
  .../include/media/camera_record_service.h     | 129 ++++
  .../include/media/record_thread.h             | 212 ++++++
- .../include/media/record_track.h              | 176 +++++
+ .../include/media/record_track.h              | 177 +++++
  media/libaudioclient/record_thread.cpp        | 605 ++++++++++++++++++
- media/libaudioclient/record_track.cpp         | 299 +++++++++
+ media/libaudioclient/record_track.cpp         | 305 +++++++++
  media/libmedia/IMediaRecorderClient.cpp       |  13 +
  .../include/media/IMediaRecorderClient.h      |   1 +
  media/libmedia/include/media/mediarecorder.h  |   1 +
- .../StagefrightRecorder.cpp                   |  40 +-
+ .../StagefrightRecorder.cpp                   |  38 +-
  .../StagefrightRecorder.h                     |   2 +
  media/libstagefright/AudioSource.cpp          |  32 +
  media/libstagefright/MPEG4Writer.cpp          |   3 +-
  .../include/media/stagefright/AudioSource.h   |  16 +
- 20 files changed, 1962 insertions(+), 53 deletions(-)
+ 20 files changed, 1969 insertions(+), 67 deletions(-)
  create mode 100644 media/libaudioclient/camera_record_service.cpp
  create mode 100644 media/libaudioclient/include/media/camera_record_service.h
  create mode 100644 media/libaudioclient/include/media/record_thread.h
@@ -48,10 +48,10 @@ Change-Id: If4404ff15f543534a67a0661a753935bc5eff30e
  create mode 100644 media/libaudioclient/record_track.cpp
 
 diff --git a/include/private/media/AudioTrackShared.h b/include/private/media/AudioTrackShared.h
-index a1e1702..44817b5 100644
+index bd638136ea..9209cdd6bc 100644
 --- a/include/private/media/AudioTrackShared.h
 +++ b/include/private/media/AudioTrackShared.h
-@@ -382,14 +382,9 @@ public:
+@@ -389,14 +389,9 @@ public:
      // Call to force an obtainBuffer() to return quickly with -EINTR
      void        interrupt();
  
@@ -68,7 +68,7 @@ index a1e1702..44817b5 100644
      void        setMinimum(size_t minimum) {
          // This can only happen on a 64-bit client
          if (minimum > UINT32_MAX) {
-@@ -402,9 +397,7 @@ public:
+@@ -409,9 +404,7 @@ public:
      // in order for the client to be aligned at start of buffer
      virtual size_t  getMisalignment();
  
@@ -80,22 +80,22 @@ index a1e1702..44817b5 100644
      int32_t getState() const { return mCblk->mState; }
      uint32_t      getBufferSizeInFrames() const { return mBufferSizeInFrames; }
 diff --git a/media/libaudioclient/Android.bp b/media/libaudioclient/Android.bp
-index 90910a1..5ade32f 100644
+index fa78ae206d..c5d55818e4 100644
 --- a/media/libaudioclient/Android.bp
 +++ b/media/libaudioclient/Android.bp
-@@ -75,6 +75,9 @@ cc_library {
+@@ -79,6 +79,9 @@ cc_library {
      cflags: [
-         "-Werror",
          "-Wall",
+         "-Werror",
 +        "-Wno-error=unused-variable",
 +        "-Wno-error=unused-parameter",
 +        "-Wno-error=unused-private-field",
      ],
      include_dirs: ["system/media/audio_utils/include"],
      export_include_dirs: ["include"],
-@@ -117,6 +120,9 @@ cc_library {
-         "PlayerBase.cpp",
+@@ -122,6 +125,9 @@ cc_library {
          "RecordingActivityTracker.cpp",
+         "ToneGenerator.cpp",
          "TrackPlayerBase.cpp",
 +        "record_thread.cpp",
 +        "record_track.cpp",
@@ -103,7 +103,7 @@ index 90910a1..5ade32f 100644
      ],
      defaults: [
          "latest_android_media_audio_common_types_cpp_shared",
-@@ -144,6 +150,7 @@ cc_library {
+@@ -150,6 +156,7 @@ cc_library {
          "libmediametrics",
          "libmediautils",
          "libnblog",
@@ -111,7 +111,7 @@ index 90910a1..5ade32f 100644
          "libprocessgroup",
          "libshmemcompat",
          "libutils",
-@@ -161,6 +168,8 @@ cc_library {
+@@ -170,6 +177,8 @@ cc_library {
  
      include_dirs: [
          "frameworks/av/media/libnbaio/include_mono/",
@@ -119,9 +119,9 @@ index 90910a1..5ade32f 100644
 +        "vendor/halium/libhybris/compat/media",
      ],
      local_include_dirs: [
-         "include/media",
+         "aidl",
 diff --git a/media/libaudioclient/AudioRecord.cpp b/media/libaudioclient/AudioRecord.cpp
-index 91bc700..7ced30a 100644
+index af390c1ba4..6bcf42e093 100644
 --- a/media/libaudioclient/AudioRecord.cpp
 +++ b/media/libaudioclient/AudioRecord.cpp
 @@ -16,7 +16,7 @@
@@ -141,7 +141,7 @@ index 91bc700..7ced30a 100644
  
  #define WAIT_PERIOD_MS          10
  
-@@ -776,7 +777,6 @@ const char * AudioRecord::convertTransferToText(transfer_type transferType) {
+@@ -825,7 +826,6 @@ const char * AudioRecord::convertTransferToText(transfer_type transferType) {
  status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
  {
      const int64_t beginNs = systemTime();
@@ -149,14 +149,15 @@ index 91bc700..7ced30a 100644
      IAudioFlinger::CreateRecordInput input;
      IAudioFlinger::CreateRecordOutput output;
      [[maybe_unused]] audio_session_t originalSessionId;
-@@ -787,10 +787,11 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
+@@ -834,10 +834,13 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
+     status_t status;
+     static const int32_t kMaxCreateAttempts = 3;
      int32_t remainingAttempts = kMaxCreateAttempts;
-     std::string errorMessage;
++    std::string errorMessage;
  
 -    if (audioFlinger == 0) {
--        errorMessage = StringPrintf("%s(%d): Could not get audioflinger", __func__, mPortId);
--        status = NO_INIT;
--        goto exit;
+-        return logIfErrorAndReturnStatus(
+-                NO_INIT, StringPrintf("%s(%d): Could not get audioflinger", __func__, mPortId), "");
 +    // Get an instance of the CameraRecordInstance over Binder
 +    const sp<ICameraRecordService>& recordService = AudioSystem::get_camera_record_service();
 +    if (recordService == 0) {
@@ -165,22 +166,47 @@ index 91bc700..7ced30a 100644
      }
  
      // mFlags (not mOrigFlags) is modified depending on whether fast request is accepted.
-@@ -846,26 +847,25 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
+@@ -893,44 +896,25 @@ status_t AudioRecord::createRecord_l(const Modulo<uint32_t> &epoch)
      originalSessionId = mSessionId;
      input.maxSharedAudioHistoryMs = mMaxSharedAudioHistoryMs;
  
 -    do {
 -        media::CreateRecordResponse response;
--        status = audioFlinger->createRecord(VALUE_OR_FATAL(input.toAidl()), response);
--        output = VALUE_OR_FATAL(IAudioFlinger::CreateRecordOutput::fromAidl(response));
+-        auto aidlInput = input.toAidl();
+-        if (!aidlInput.ok()) {
+-            return logIfErrorAndReturnStatus(
+-                    BAD_VALUE,
+-                    StringPrintf("%s(%d): Could not create record due to invalid input", __func__,
+-                                 mPortId),
+-                    "");
+-        }
+-        status = audioFlinger->createRecord(aidlInput.value(), response);
++    // Initialize the input reader RecordThread:
++    status = recordService->initRecord(input.config.sample_rate, input.config.format,
++                                       input.config.channel_mask);
++    if (status != NO_ERROR) {
++        ALOGE("Failed to initialize RecordThread: %s", strerror(status));
++        return status;
++    }
+ 
+-        auto recordOutput = IAudioFlinger::CreateRecordOutput::fromAidl(response);
+-        if (!recordOutput.ok()) {
+-            return logIfErrorAndReturnStatus(
+-                    BAD_VALUE,
+-                    StringPrintf("%s(%d): Could not create record output due to invalid response",
+-                                 __func__, mPortId),
+-                    "");
+-        }
+-        output = recordOutput.value();
 -        if (status == NO_ERROR) {
 -            break;
 -        }
 -        if (status != FAILED_TRANSACTION || --remainingAttempts <= 0) {
--            errorMessage = StringPrintf(
--                    "%s(%d): AudioFlinger could not create record track, status: %d",
--                    __func__, mPortId, status);
--            goto exit;
+-            return logIfErrorAndReturnStatus(
+-                    status,
+-                    StringPrintf("%s(%d): AudioFlinger could not create record track, status: %d",
+-                                 __func__, mPortId, status),
+-                    "");
 -        }
 -        // FAILED_TRANSACTION happens under very specific conditions causing a state mismatch
 -        // between audio policy manager and audio flinger during the input stream open sequence
@@ -189,14 +215,6 @@ index 91bc700..7ced30a 100644
 -        // to reduce the probability of concurrent retries in locked steps.
 -        usleep((20 + rand() % 30) * 10000);
 -    } while (1);
-+    // Initialize the input reader RecordThread:
-+    status = recordService->initRecord(input.config.sample_rate, input.config.format,
-+                                       input.config.channel_mask);
-+    if (status != NO_ERROR) {
-+        ALOGE("Failed to initialize RecordThread: %s", strerror(status));
-+        return status;
-+    }
-+
 +    output.audioRecord = recordService->openRecord(input.config.sample_rate, input.config.format,
 +                                                   input.config.channel_mask,
 +                                                   input.frameCount,
@@ -212,7 +230,7 @@ index 91bc700..7ced30a 100644
      ALOG_ASSERT(output.audioRecord != 0);
  
 diff --git a/media/libaudioclient/AudioSystem.cpp b/media/libaudioclient/AudioSystem.cpp
-index d1b1849..aa2ea71 100644
+index 7e59d9e607..ca82eb266c 100644
 --- a/media/libaudioclient/AudioSystem.cpp
 +++ b/media/libaudioclient/AudioSystem.cpp
 @@ -26,14 +26,17 @@
@@ -220,6 +238,7 @@ index d1b1849..aa2ea71 100644
  #include <binder/ProcessState.h>
  #include <binder/IPCThreadState.h>
 +#include <cutils/bitops.h>
+ #include <cutils/properties.h>
  #include <media/AidlConversion.h>
  #include <media/AudioResamplerPublic.h>
  #include <media/AudioSystem.h>
@@ -227,22 +246,21 @@ index d1b1849..aa2ea71 100644
  #include <media/PolicyAidlConversion.h>
 +#include <media/camera_record_service.h>
  #include <media/TypeConverter.h>
- #include <math.h>
- 
+ #include <mediautils/ServiceSingleton.h>
 +#include "cutils/atomic.h"
- #include <system/audio.h>
- #include <android/media/GetInputForAttrResponse.h>
- #include <android/media/AudioMixerAttributesInternal.h>
+ #include <math.h>
+ #include <private/android_filesystem_config.h>
+ 
 @@ -77,6 +80,7 @@ std::set<audio_error_callback> AudioSystem::gAudioErrorCallbacks;
  
  std::mutex AudioSystem::gSoundTriggerMutex;
  sp<CaptureStateListenerImpl> AudioSystem::gSoundTriggerCaptureStateListener;
 +sp<ICameraRecordService> AudioSystem::gCameraRecord;
  
- // Sets the Binder for the AudioFlinger service, passed to this client process
- // from the system server.
-@@ -224,6 +228,26 @@ sp<IAudioFlinger> AudioSystem::get_audio_flinger() {
-     return gAudioFlingerServiceHandler.getService();
+ // ----------------------------
+ 
+@@ -314,6 +318,26 @@ sp<IAudioFlinger> AudioSystem::get_audio_flinger() {
+     return AudioFlingerServiceTraits::getService();
  }
  
 +const sp<ICameraRecordService>& AudioSystem::get_camera_record_service()
@@ -265,19 +283,19 @@ index d1b1849..aa2ea71 100644
 +    return gCameraRecord;
 +}
 +
- sp<IAudioFlinger> AudioSystem::get_audio_flinger_for_fuzzer() {
-     return gAudioFlingerServiceHandler.getService(false /* canStartThreadPool */);
+ sp<AudioSystem::AudioFlingerClient> AudioSystem::getAudioFlingerClient() {
+     return AudioFlingerServiceTraits::getClient();
  }
-@@ -264,7 +288,7 @@ sp<AudioIoDescriptor> AudioSystem::getIoDescriptor(audio_io_handle_t ioHandle) {
+@@ -343,7 +367,7 @@ sp<AudioIoDescriptor> AudioSystem::getIoDescriptor(audio_io_handle_t ioHandle) {
  // FIXME Declare in binder opcode order, similarly to IAudioFlinger.h and IAudioFlinger.cpp
  
  status_t AudioSystem::muteMicrophone(bool state) {
 -    const sp<IAudioFlinger> af = get_audio_flinger();
 +    const sp<IAudioFlinger> af = nullptr; /*get_audio_flinger();*/
-     if (af == 0) return PERMISSION_DENIED;
+     if (af == nullptr) return AudioFlingerServiceTraits::getError();
      return af->setMicMute(state);
  }
-@@ -522,13 +546,71 @@ status_t AudioSystem::getLatency(audio_io_handle_t output,
+@@ -580,13 +604,71 @@ status_t AudioSystem::getLatency(audio_io_handle_t output,
      return NO_ERROR;
  }
  
@@ -351,7 +369,7 @@ index d1b1849..aa2ea71 100644
  }
  
  status_t AudioSystem::setVoiceVolume(float value) {
-@@ -555,11 +637,17 @@ uint32_t AudioSystem::getInputFramesLost(audio_io_handle_t ioHandle) {
+@@ -613,11 +695,17 @@ uint32_t AudioSystem::getInputFramesLost(audio_io_handle_t ioHandle) {
      return result;
  }
  
@@ -361,7 +379,7 @@ index d1b1849..aa2ea71 100644
      // Must not use AF as IDs will re-roll on audioserver restart, b/130369529.
 +    /*
      const sp<IAudioFlinger> af = get_audio_flinger();
-     if (af == 0) return AUDIO_UNIQUE_ID_ALLOCATE;
+     if (af == nullptr) return AUDIO_UNIQUE_ID_ALLOCATE;
      return af->newAudioUniqueId(use);
 +    */
 +    (void) use;
@@ -370,10 +388,10 @@ index d1b1849..aa2ea71 100644
  
  void AudioSystem::acquireAudioSessionId(audio_session_t audioSession, pid_t pid, uid_t uid) {
 diff --git a/media/libaudioclient/AudioTrackShared.cpp b/media/libaudioclient/AudioTrackShared.cpp
-index e3b79b2..d1d1595 100644
+index e614228ac8..7ca19c723d 100644
 --- a/media/libaudioclient/AudioTrackShared.cpp
 +++ b/media/libaudioclient/AudioTrackShared.cpp
-@@ -423,6 +423,21 @@ void ClientProxy::interrupt()
+@@ -433,6 +433,21 @@ void ClientProxy::interrupt()
      }
  }
  
@@ -397,7 +415,7 @@ index e3b79b2..d1d1595 100644
  {
 diff --git a/media/libaudioclient/camera_record_service.cpp b/media/libaudioclient/camera_record_service.cpp
 new file mode 100644
-index 0000000..10fbb62
+index 0000000000..10fbb62969
 --- /dev/null
 +++ b/media/libaudioclient/camera_record_service.cpp
 @@ -0,0 +1,294 @@
@@ -696,10 +714,10 @@ index 0000000..10fbb62
 +
 +} // namespace android
 diff --git a/media/libaudioclient/include/media/AudioSystem.h b/media/libaudioclient/include/media/AudioSystem.h
-index 338534d..5b0e454 100644
+index a7c7a39265..b4644a91f7 100644
 --- a/media/libaudioclient/include/media/AudioSystem.h
 +++ b/media/libaudioclient/include/media/AudioSystem.h
-@@ -89,6 +89,7 @@ typedef void (*vol_range_init_req_callback)();
+@@ -90,6 +90,7 @@ typedef void (*vol_range_init_req_callback)();
  
  class CaptureStateListenerImpl;
  class IAudioFlinger;
@@ -707,17 +725,17 @@ index 338534d..5b0e454 100644
  class String8;
  
  namespace media {
-@@ -189,6 +190,9 @@ public:
+@@ -191,6 +192,9 @@ public:
+     // helper function to obtain AudioFlinger service handle
      static sp<IAudioFlinger> get_audio_flinger();
-     static sp<IAudioFlinger> get_audio_flinger_for_fuzzer();
  
 +    // helper function to obtain CameraRecordService service handle
 +    static const sp<ICameraRecordService>& get_camera_record_service();
 +
-     static float linearToLog(int volume);
-     static int logToLinear(float volume);
-     static size_t calculateMinFrameCount(
-@@ -922,6 +926,11 @@ public:
+     // function to disable creation of thread pool (Used for testing).
+     // This should be called before get_audio_flinger() or get_audio_policy_service().
+     static void disableThreadPool();
+@@ -996,6 +1000,11 @@ public:
      [[clang::no_destroy]] static std::mutex gSoundTriggerMutex;
      [[clang::no_destroy]] static sp<CaptureStateListenerImpl> gSoundTriggerCaptureStateListener
              GUARDED_BY(gSoundTriggerMutex);
@@ -731,7 +749,7 @@ index 338534d..5b0e454 100644
  }  // namespace android
 diff --git a/media/libaudioclient/include/media/camera_record_service.h b/media/libaudioclient/include/media/camera_record_service.h
 new file mode 100644
-index 0000000..8a4e7f5
+index 0000000000..8a4e7f5858
 --- /dev/null
 +++ b/media/libaudioclient/include/media/camera_record_service.h
 @@ -0,0 +1,129 @@
@@ -866,7 +884,7 @@ index 0000000..8a4e7f5
 + #endif // CAMERA_RECORD_SERVICE_H
 diff --git a/media/libaudioclient/include/media/record_thread.h b/media/libaudioclient/include/media/record_thread.h
 new file mode 100644
-index 0000000..bcfd406
+index 0000000000..bcfd406536
 --- /dev/null
 +++ b/media/libaudioclient/include/media/record_thread.h
 @@ -0,0 +1,212 @@
@@ -1084,10 +1102,10 @@ index 0000000..bcfd406
 +#endif // RECORD_THREAD_H
 diff --git a/media/libaudioclient/include/media/record_track.h b/media/libaudioclient/include/media/record_track.h
 new file mode 100644
-index 0000000..6d42e98
+index 0000000000..6d1c47c36b
 --- /dev/null
 +++ b/media/libaudioclient/include/media/record_track.h
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,177 @@
 +/*
 + * Copyright (C) 2014 Canonical Ltd
 + * Copyright 2012, The Android Open Source Project
@@ -1254,6 +1272,7 @@ index 0000000..6d42e98
 +    virtual binder::Status setPreferredMicrophoneDirection(int32_t direction);
 +    virtual binder::Status setPreferredMicrophoneFieldDimension(float zoom);
 +    virtual binder::Status shareAudioHistory(const std::string& sharedAudioPackageName, int64_t sharedAudioStartMs);
++    virtual binder::Status setParameters(const std::string& keyValuePairs);
 +private:
 +    const sp<RecordTrack> mRecordTrack;
 +
@@ -1266,7 +1285,7 @@ index 0000000..6d42e98
 +#endif // RECORD_TRACK_H
 diff --git a/media/libaudioclient/record_thread.cpp b/media/libaudioclient/record_thread.cpp
 new file mode 100644
-index 0000000..609e4af
+index 0000000000..609e4af588
 --- /dev/null
 +++ b/media/libaudioclient/record_thread.cpp
 @@ -0,0 +1,605 @@
@@ -1877,10 +1896,10 @@ index 0000000..609e4af
 +} // namespace android
 diff --git a/media/libaudioclient/record_track.cpp b/media/libaudioclient/record_track.cpp
 new file mode 100644
-index 0000000..0083bb3
+index 0000000000..b65d7f756f
 --- /dev/null
 +++ b/media/libaudioclient/record_track.cpp
-@@ -0,0 +1,299 @@
+@@ -0,0 +1,305 @@
 +/*
 + * Copyright (C) 2014 Canonical Ltd
 + * Copyright 2012, The Android Open Source Project
@@ -2179,9 +2198,15 @@ index 0000000..0083bb3
 +    return binder::Status::ok();
 +}
 +
++binder::Status RecordHandle::setParameters(const std::string&)
++{
++    REPORT_FUNCTION();
++    return binder::Status::ok();
++}
++
 +} // namespace android
 diff --git a/media/libmedia/IMediaRecorderClient.cpp b/media/libmedia/IMediaRecorderClient.cpp
-index a76f934..3e9f418 100644
+index a76f934df7..3e9f418b1d 100644
 --- a/media/libmedia/IMediaRecorderClient.cpp
 +++ b/media/libmedia/IMediaRecorderClient.cpp
 @@ -25,6 +25,7 @@ namespace android {
@@ -2219,7 +2244,7 @@ index a76f934..3e9f418 100644
              return BBinder::onTransact(code, data, reply, flags);
      }
 diff --git a/media/libmedia/include/media/IMediaRecorderClient.h b/media/libmedia/include/media/IMediaRecorderClient.h
-index e7d0229..c54f516 100644
+index e7d0229576..c54f516b0d 100644
 --- a/media/libmedia/include/media/IMediaRecorderClient.h
 +++ b/media/libmedia/include/media/IMediaRecorderClient.h
 @@ -29,6 +29,7 @@ public:
@@ -2231,10 +2256,10 @@ index e7d0229..c54f516 100644
  
  // ----------------------------------------------------------------------------
 diff --git a/media/libmedia/include/media/mediarecorder.h b/media/libmedia/include/media/mediarecorder.h
-index 602f72e..033628c 100644
+index fbdc05bf09..39bef2de3d 100644
 --- a/media/libmedia/include/media/mediarecorder.h
 +++ b/media/libmedia/include/media/mediarecorder.h
-@@ -274,6 +274,7 @@ public:
+@@ -278,6 +278,7 @@ public:
  
      status_t    getPortId(audio_port_handle_t *portId) const;
      status_t    getRtpDataUsage(uint64_t *bytes);
@@ -2243,14 +2268,13 @@ index 602f72e..033628c 100644
  private:
      void                    doCleanUp();
 diff --git a/media/libmediaplayerservice/StagefrightRecorder.cpp b/media/libmediaplayerservice/StagefrightRecorder.cpp
-index 3ab32f0..4629c09 100644
+index 2aba3261e7..e9160f968f 100644
 --- a/media/libmediaplayerservice/StagefrightRecorder.cpp
 +++ b/media/libmediaplayerservice/StagefrightRecorder.cpp
-@@ -107,21 +107,10 @@ static const char *kRecorderDurationMs = "android.media.mediarecorder.durationMs
- static const char *kRecorderPaused = "android.media.mediarecorder.pausedMs";
+@@ -111,17 +111,8 @@ static const char *kRecorderPaused = "android.media.mediarecorder.pausedMs";
  static const char *kRecorderNumPauses = "android.media.mediarecorder.NPauses";
  
--
+ 
 -// To collect the encoder usage for the battery app
 -static void addBatteryData(uint32_t params) {
 -    sp<IBinder> binder =
@@ -2266,12 +2290,9 @@ index 3ab32f0..4629c09 100644
 +    // Empty on purpose.
  }
  
--
- StagefrightRecorder::StagefrightRecorder(const AttributionSourceState& client)
-     : MediaRecorderBase(client),
-       mWriter(NULL),
-@@ -254,6 +243,21 @@ sp<IGraphicBufferProducer> StagefrightRecorder::querySurfaceMediaSource() const
-     return mGraphicBufferProducer;
+ 
+@@ -258,6 +249,21 @@ sp<MediaSurfaceType> StagefrightRecorder::querySurfaceMediaSource() const {
+     return mSurface;
  }
  
 +void StagefrightRecorder::onReadAudioCb(void *context)
@@ -2292,7 +2313,7 @@ index 3ab32f0..4629c09 100644
  status_t StagefrightRecorder::setAudioSource(audio_source_t as) {
      ALOGV("setAudioSource: %d", as);
  
-@@ -1156,6 +1160,7 @@ status_t StagefrightRecorder::setParameters(const String8 &params) {
+@@ -1169,6 +1175,7 @@ status_t StagefrightRecorder::setParameters(const String8 &params) {
  }
  
  status_t StagefrightRecorder::setListener(const sp<IMediaRecorderClient> &listener) {
@@ -2300,7 +2321,7 @@ index 3ab32f0..4629c09 100644
      mListener = listener;
  
      return OK;
-@@ -1389,6 +1394,14 @@ sp<MediaCodecSource> StagefrightRecorder::createAudioSource() {
+@@ -1402,6 +1409,14 @@ sp<MediaCodecSource> StagefrightRecorder::createAudioSource() {
          return NULL;
      }
  
@@ -2315,7 +2336,7 @@ index 3ab32f0..4629c09 100644
      sp<AMessage> format = new AMessage;
      switch (mAudioEncoder) {
          case AUDIO_ENCODER_AMR_NB:
-@@ -2284,6 +2297,7 @@ void StagefrightRecorder::setupMPEG4orWEBMMetaData(sp<MetaData> *meta) {
+@@ -2307,6 +2322,7 @@ void StagefrightRecorder::setupMPEG4orWEBMMetaData(sp<MetaData> *meta) {
              (*meta)->setInt64(kKeyTrackTimeStatus, mTrackEveryTimeDurationUs);
          }
          if (mRotationDegrees != 0) {
@@ -2324,10 +2345,10 @@ index 3ab32f0..4629c09 100644
          }
      }
 diff --git a/media/libmediaplayerservice/StagefrightRecorder.h b/media/libmediaplayerservice/StagefrightRecorder.h
-index 0b6a5bb..4d92d93 100644
+index ee5a1d530b..6044278f48 100644
 --- a/media/libmediaplayerservice/StagefrightRecorder.h
 +++ b/media/libmediaplayerservice/StagefrightRecorder.h
-@@ -88,6 +88,7 @@ struct StagefrightRecorder : public MediaRecorderBase {
+@@ -89,6 +89,7 @@ struct StagefrightRecorder : public MediaRecorderBase {
      virtual status_t setPreferredMicrophoneFieldDimension(float zoom);
              status_t getPortId(audio_port_handle_t *portId) const override;
      virtual status_t getRtpDataUsage(uint64_t *bytes);
@@ -2335,16 +2356,16 @@ index 0b6a5bb..4d92d93 100644
  
  private:
  
-@@ -184,6 +185,7 @@ private:
+@@ -186,6 +187,7 @@ private:
      // frame buffers will be queued and dequeued
-     sp<IGraphicBufferProducer> mGraphicBufferProducer;
+     sp<MediaSurfaceType> mSurface;
      sp<ALooper> mLooper;
 +    void onReadAudio();
  
      audio_port_handle_t mSelectedDeviceId;
      bool mDeviceCallbackEnabled;
 diff --git a/media/libstagefright/AudioSource.cpp b/media/libstagefright/AudioSource.cpp
-index 584dad6..cbbb93b 100644
+index f658d846c4..6e3651e8d1 100644
 --- a/media/libstagefright/AudioSource.cpp
 +++ b/media/libstagefright/AudioSource.cpp
 @@ -32,6 +32,8 @@
@@ -2408,7 +2429,7 @@ index 584dad6..cbbb93b 100644
      Mutex::Autolock autoLock(mLock);
      if (mInitCheck != OK) {
 diff --git a/media/libstagefright/MPEG4Writer.cpp b/media/libstagefright/MPEG4Writer.cpp
-index e918b5e..c10e480 100644
+index 2dac9e95a3..137cf6c64e 100644
 --- a/media/libstagefright/MPEG4Writer.cpp
 +++ b/media/libstagefright/MPEG4Writer.cpp
 @@ -14,7 +14,7 @@
@@ -2420,7 +2441,7 @@ index e918b5e..c10e480 100644
  #define LOG_TAG "MPEG4Writer"
  
  #include <algorithm>
-@@ -4781,6 +4781,7 @@ void MPEG4Writer::Track::writeTkhdBox(uint32_t now) {
+@@ -5045,6 +5045,7 @@ void MPEG4Writer::Track::writeTkhdBox(uint32_t now) {
      mOwner->writeInt16(mIsAudio ? 0x100 : 0);  // volume
      mOwner->writeInt16(0);             // reserved
  
@@ -2429,7 +2450,7 @@ index e918b5e..c10e480 100644
  
      if (!mIsVideo) {
 diff --git a/media/libstagefright/include/media/stagefright/AudioSource.h b/media/libstagefright/include/media/stagefright/AudioSource.h
-index 65d5246..1ab02d8 100644
+index 51f6ac45cc..34ffbad075 100644
 --- a/media/libstagefright/include/media/stagefright/AudioSource.h
 +++ b/media/libstagefright/include/media/stagefright/AudioSource.h
 @@ -33,6 +33,7 @@ namespace android {
@@ -2476,6 +2497,3 @@ index 65d5246..1ab02d8 100644
  
      sp<AudioRecord> mRecord;
      status_t mInitCheck;
--- 
-2.45.2
-

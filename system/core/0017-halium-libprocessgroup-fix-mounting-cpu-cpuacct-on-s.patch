@@ -1,8 +1,8 @@
-From ab35ef65857bbd0eea79874fc68fe6f2570f49fe Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Mon, 20 Mar 2023 18:30:57 +0000
-Subject: [PATCH 17/19] (halium) libprocessgroup: fix mounting cpu/cpuacct on
- systemd hosts
+Subject: [PATCH] (halium) libprocessgroup: fix mounting cpu/cpuacct on systemd
+ hosts
 
 systemd with cgroup v1 mounts cpu and cpuacct controllers together.
 As result, libprocessgroup's attempt to mount them independently will fail.
@@ -14,10 +14,10 @@ Change-Id: I7893b0a809dffec49c15f36621363552d2e08667
  1 file changed, 13 insertions(+), 2 deletions(-)
 
 diff --git a/libprocessgroup/setup/cgroup_map_write.cpp b/libprocessgroup/setup/cgroup_map_write.cpp
-index 4e44c91..d856892 100644
+index 899b4e9524..a6f43f9a1b 100644
 --- a/libprocessgroup/setup/cgroup_map_write.cpp
 +++ b/libprocessgroup/setup/cgroup_map_write.cpp
-@@ -277,8 +277,19 @@ static bool MountV2CgroupController(const CgroupDescriptor& descriptor) {
+@@ -154,8 +154,19 @@ static bool MountV2CgroupController(const CgroupDescriptor& descriptor) {
          LOG(INFO) << "Mounting memcg with memory_recursiveprot failed. Retrying without.";
          if (mount("none", controller->path(), "cgroup2", MS_NODEV | MS_NOEXEC | MS_NOSUID,
                    nullptr) < 0) {
@@ -39,6 +39,3 @@ index 4e44c91..d856892 100644
          }
      }
  
--- 
-2.45.2
-

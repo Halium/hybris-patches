@@ -1,7 +1,7 @@
-From 5044cd1c197cc1a0e0d821a4cfa19b89c7fb0466 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 9 Feb 2020 18:39:54 +0100
-Subject: [PATCH 02/12] (halium) disable media-related services
+Subject: [PATCH] (halium) disable media-related services
 
 Their functionality is provided by minimedia in droidmedia repo instead
 
@@ -13,7 +13,7 @@ Change-Id: Ie7018a4d641d18330ac758126feed883efa71fec
  3 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/camera/cameraserver/cameraserver.rc b/camera/cameraserver/cameraserver.rc
-index e307653..864cd5b 100644
+index 63fa2b08f2..3401694fb7 100644
 --- a/camera/cameraserver/cameraserver.rc
 +++ b/camera/cameraserver/cameraserver.rc
 @@ -1,4 +1,4 @@
@@ -23,7 +23,7 @@ index e307653..864cd5b 100644
      user cameraserver
      group audio camera input drmrpc
 diff --git a/media/audioserver/audioserver.rc b/media/audioserver/audioserver.rc
-index 8bdb86e..dc2f462 100644
+index 0a8efbde82..35a577afb5 100644
 --- a/media/audioserver/audioserver.rc
 +++ b/media/audioserver/audioserver.rc
 @@ -1,4 +1,4 @@
@@ -33,7 +33,7 @@ index 8bdb86e..dc2f462 100644
      user audioserver
      # media gid needed for /dev/fm (radio) and for /data/misc/media (tee)
 diff --git a/media/mediaserver/mediaserver.rc b/media/mediaserver/mediaserver.rc
-index 05373c9..b6f0558 100644
+index 05373c9c3f..b6f0558596 100644
 --- a/media/mediaserver/mediaserver.rc
 +++ b/media/mediaserver/mediaserver.rc
 @@ -1,9 +1,9 @@
@@ -49,6 +49,3 @@ index 05373c9..b6f0558 100644
 -    task_profiles ProcessCapacityHigh HighPerformance
 +    task_profiles ProcessCapacityHigh HighPerformance
 \ No newline at end of file
--- 
-2.45.2
-

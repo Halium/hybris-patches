@@ -1,7 +1,7 @@
-From 21d78579cb9f5e3ebf006bccafd3a315bcb5446b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sat, 19 Dec 2020 21:42:41 +0200
-Subject: [PATCH 04/19] (halium) avoid modifying USB configuration set by host
+Subject: [PATCH] (halium) avoid modifying USB configuration set by host
 
 Change-Id: I76ff71ca5784be1be93819a5b9bfb74a6c5c0da2
 ---
@@ -10,7 +10,7 @@ Change-Id: I76ff71ca5784be1be93819a5b9bfb74a6c5c0da2
  2 files changed, 6 insertions(+), 3 deletions(-)
 
 diff --git a/rootdir/init.rc b/rootdir/init.rc
-index ead99de..9e3be2b 100644
+index c9fe0a07b4..5d4a1ffd63 100644
 --- a/rootdir/init.rc
 +++ b/rootdir/init.rc
 @@ -5,10 +5,13 @@
@@ -30,7 +30,7 @@ index ead99de..9e3be2b 100644
  
  # Cgroups are mounted right before early-init using list from /etc/cgroups.json
 diff --git a/usbd/usbd.rc b/usbd/usbd.rc
-index 809044a..56c8934 100644
+index 809044aaa1..56c89344f7 100644
 --- a/usbd/usbd.rc
 +++ b/usbd/usbd.rc
 @@ -1,4 +1,4 @@
@@ -39,6 +39,3 @@ index 809044a..56c8934 100644
      class late_start
      oneshot
      user root
--- 
-2.45.2
-

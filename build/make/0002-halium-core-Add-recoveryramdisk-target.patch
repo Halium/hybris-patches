@@ -1,7 +1,7 @@
-From 76893284a9bdbd7c96861b7b554ba912c8fbbce6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Mon, 16 May 2022 15:48:26 +0300
-Subject: [PATCH 2/2] (halium) core: Add "recoveryramdisk" target
+Subject: [PATCH] (halium) core: Add "recoveryramdisk" target
 
 This adds a new target "recoveryramdisk", which can be used to build
 recovery ramdisk without compiling kernel for full recovery image.
@@ -16,10 +16,10 @@ Change-Id: Iedc1b3b97e22e615e1480505bfb5e294aa08b263
  1 file changed, 3 insertions(+)
 
 diff --git a/core/Makefile b/core/Makefile
-index 5aef6cc..e34eca6 100644
+index 30dee4f7e2..5cab43fbe3 100644
 --- a/core/Makefile
 +++ b/core/Makefile
-@@ -2767,6 +2767,9 @@ $(recovery_ramdisk): $(recovery_uncompressed_ramdisk) $(COMPRESSION_COMMAND_DEPS
+@@ -2805,6 +2805,9 @@ $(recovery_ramdisk): $(recovery_uncompressed_ramdisk) $(COMPRESSION_COMMAND_DEPS
  	@echo ----- Making compressed recovery ramdisk ------
  	$(COMPRESSION_COMMAND) < $(recovery_uncompressed_ramdisk) > $@
  
@@ -29,6 +29,3 @@ index 5aef6cc..e34eca6 100644
  # $(1): output file
  # $(2): optional kernel file
  define build-recoveryimage-target
--- 
-2.45.2
-

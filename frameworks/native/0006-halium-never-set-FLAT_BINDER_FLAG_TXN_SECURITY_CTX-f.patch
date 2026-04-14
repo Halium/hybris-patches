@@ -1,8 +1,7 @@
-From f089f95d13fa3e3a547a90065d66453b58ea1d0b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sun, 7 Mar 2021 17:15:20 +0200
-Subject: [PATCH 06/12] (halium) never set FLAT_BINDER_FLAG_TXN_SECURITY_CTX
- flag
+Subject: [PATCH] (halium) never set FLAT_BINDER_FLAG_TXN_SECURITY_CTX flag
 
 It breaks binder transactions when run on a kernel without
 SELinux support.
@@ -14,10 +13,10 @@ Change-Id: Ibff0f58a7867061a9353bf8bf5ab092ed562b65f
  2 files changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
-index c1770b3..f4a2d26 100644
+index a9eaf07da3..f1256c33cd 100644
 --- a/libs/binder/Parcel.cpp
 +++ b/libs/binder/Parcel.cpp
-@@ -306,9 +306,14 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
+@@ -319,9 +319,14 @@ status_t Parcel::flattenBinder(const sp<IBinder>& binder) {
                  schedBits = schedPolicyMask(policy, priority);
              }
              obj.flags = FLAT_BINDER_FLAG_ACCEPTS_FDS;
@@ -33,10 +32,10 @@ index c1770b3..f4a2d26 100644
                  obj.flags |= FLAT_BINDER_FLAG_INHERIT_RT;
              }
 diff --git a/libs/binder/ProcessState.cpp b/libs/binder/ProcessState.cpp
-index fb2781b..7224812 100644
+index f7d53472a5..10a70ddb0b 100644
 --- a/libs/binder/ProcessState.cpp
 +++ b/libs/binder/ProcessState.cpp
-@@ -209,7 +209,8 @@ bool ProcessState::becomeContextManager()
+@@ -236,7 +236,8 @@ bool ProcessState::becomeContextManager()
      std::unique_lock<std::mutex> _l(mLock);
  
      flat_binder_object obj {
@@ -46,6 +45,3 @@ index fb2781b..7224812 100644
      };
  
      int result = ioctl(mDriverFD, BINDER_SET_CONTEXT_MGR_EXT, &obj);
--- 
-2.45.2
-

@@ -1,7 +1,7 @@
-From 2dec28bdfa570a598c8f42771f1165b84500777b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 19 Apr 2020 23:47:38 +0200
-Subject: [PATCH 06/19] (halium) init: ignore non-kernel messages in ReadUevent
+Subject: [PATCH] (halium) init: ignore non-kernel messages in ReadUevent
 
 Do not abort processing pending uevents in case uevent_kernel_multicast_recv
 returns EIO errno.
@@ -15,10 +15,10 @@ Change-Id: Ib7e4521899035e2dc67efaf27fc1bea13659efb4
  1 file changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/init/uevent_listener.cpp b/init/uevent_listener.cpp
-index 5da6777..785a7aa 100644
+index a7ecd43377..85dcbf422e 100644
 --- a/init/uevent_listener.cpp
 +++ b/init/uevent_listener.cpp
-@@ -99,7 +99,19 @@ ReadUeventResult UeventListener::ReadUevent(Uevent* uevent) const {
+@@ -109,7 +109,19 @@ ReadUeventResult UeventListener::ReadUevent(Uevent* uevent) const {
      char msg[UEVENT_MSG_LEN + 2];
      int n = uevent_kernel_multicast_recv(device_fd_.get(), msg, UEVENT_MSG_LEN);
      if (n <= 0) {
@@ -39,6 +39,3 @@ index 5da6777..785a7aa 100644
              PLOG(ERROR) << "Error reading from Uevent Fd";
          }
          return ReadUeventResult::kFailed;
--- 
-2.45.2
-

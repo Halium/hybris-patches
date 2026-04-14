@@ -1,8 +1,8 @@
-From 0ec8c171f743f6370fdebb7f800fb7f2c558ebdf Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alfred Neumayer <dev.beidl@gmail.com>
 Date: Tue, 29 Mar 2022 21:52:24 +0200
-Subject: [PATCH 13/19] (halium) healthd: Shut down using sys.powerctl in
- charger mode
+Subject: [PATCH] (halium) healthd: Shut down using sys.powerctl in charger
+ mode
 
 Since Halium runs in a container, it is not properly guaranteed to
 handle reboots properly. Turns out that on the Pixel 3a it spams
@@ -22,7 +22,7 @@ Change-Id: Ia43aaa40e528416810414feb0c4a6dce4f9d548d
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/healthd/healthd_mode_charger.cpp b/healthd/healthd_mode_charger.cpp
-index 26af13b..9ef0f8e 100644
+index 54b469be39..770422c3a7 100644
 --- a/healthd/healthd_mode_charger.cpp
 +++ b/healthd/healthd_mode_charger.cpp
 @@ -499,7 +499,7 @@ void Charger::ProcessKey(int code, int64_t now) {
@@ -34,6 +34,3 @@ index 26af13b..9ef0f8e 100644
                      } else {
                          LOGV("[%" PRId64
                               "] ignore power-button press, battery level "
--- 
-2.45.2
-

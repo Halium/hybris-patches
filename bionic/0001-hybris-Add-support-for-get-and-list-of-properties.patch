@@ -1,27 +1,26 @@
-From e893700d090b5faaa97b96cbed1632577aa822e8 Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?=3D=3FUTF-8=3Fq=3FMatti=3D20Lehtim=3DC3=3DA4ki=3F=3D?=
- <matti.lehtimaki@gmail.com>
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matti=20Lehtim=C3=A4ki?= <matti.lehtimaki@gmail.com>
 Date: Sun, 17 Dec 2017 00:16:16 +0200
-Subject: [PATCH 1/9] (hybris) Add support for get and list of properties.
+Subject: [PATCH] (hybris) Add support for get and list of properties.
+
+Adapted for Android 16: defines moved from _system_properties.h
+to system_properties.h.
 
 Change-Id: I089a2a146c06d8ad0c234f0a9a4b5aa07beaeed5
 ---
- libc/include/sys/_system_properties.h | 2 ++
+ libc/include/sys/system_properties.h | 2 ++
  1 file changed, 2 insertions(+)
 
-diff --git a/libc/include/sys/_system_properties.h b/libc/include/sys/_system_properties.h
-index 078e857..95fa58f 100644
---- a/libc/include/sys/_system_properties.h
-+++ b/libc/include/sys/_system_properties.h
-@@ -45,6 +45,8 @@ __BEGIN_DECLS
- #define PROP_DIRNAME "/dev/__properties__"
+diff --git a/libc/include/sys/system_properties.h b/libc/include/sys/system_properties.h
+index d850b1e28..4e3901559 100644
+--- a/libc/include/sys/system_properties.h
++++ b/libc/include/sys/system_properties.h
+@@ -182,6 +182,8 @@ int __system_properties_init(void);
  
+ // Messages sent to init.
  #define PROP_MSG_SETPROP 1
 +#define PROP_MSG_GETPROP 2
 +#define PROP_MSG_LISTPROP 3
  #define PROP_MSG_SETPROP2 0x00020001
  
- #define PROP_SUCCESS 0
--- 
-2.45.2
-
+ // Status codes returned by init (but not passed from libc to the caller).

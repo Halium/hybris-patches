@@ -1,43 +1,42 @@
-From 87c63f53403745db1db6c2239b4b03c7011724a4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sun, 7 Mar 2021 17:13:31 +0200
-Subject: [PATCH 05/12] (halium) disable SELinux checks in ServiceManager
+Subject: [PATCH] (halium) disable SELinux checks in ServiceManager
 
 Change-Id: Ida8e91453db58b1123468931c94d4a40d273b0b3
 ---
- cmds/servicemanager/Access.cpp | 16 ++++++++++++++--
- 1 file changed, 14 insertions(+), 2 deletions(-)
+ cmds/servicemanager/Access.cpp | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
 
 diff --git a/cmds/servicemanager/Access.cpp b/cmds/servicemanager/Access.cpp
-index 711038c..977b01e 100644
+index 6e2abf65e2..f645a96450 100644
 --- a/cmds/servicemanager/Access.cpp
 +++ b/cmds/servicemanager/Access.cpp
 @@ -34,6 +34,9 @@ constexpr bool kIsVendor = false;
- static std::string getPidcon(pid_t pid) {
-     android_errorWriteLog(0x534e4554, "121035042");
  
+ #ifdef __ANDROID__
+ static std::string getPidcon(pid_t pid) {
 +    // Disabled for Halium
 +    return "";
 +
-     char* lookup = nullptr;
-     if (getpidcon(pid, &lookup) < 0) {
-         LOG(ERROR) << "SELinux: getpidcon(pid=" << pid << ") failed to retrieve pid context";
-@@ -90,9 +93,12 @@ Access::Access() {
+     CHECK_EQ(nullptr, IPCThreadState::self()->getServingStackPointer())
+             << "Did not get context from PID " << pid
+             << ". We should always get contexts from other processes.";
+@@ -100,9 +103,10 @@ Access::Access() {
      cb.func_log = kIsVendor ? selinux_vendor_log_callback : selinux_log_callback;
      selinux_set_callback(SELINUX_CB_LOG, cb);
  
 -    CHECK(selinux_status_open(true /*fallback*/) >= 0);
 -
+-    CHECK(getcon(&mThisProcessContext) == 0);
 +    // Disabled for Halium
-+    /*
-+    CHECK(selinux_status_open(true) >= 0);
-     CHECK(getcon(&mThisProcessContext) == 0);
-+    */
-+
++    // CHECK(selinux_status_open(true) >= 0);
++    // CHECK(getcon(&mThisProcessContext) == 0);
++    
  #endif
  }
  
-@@ -131,6 +137,9 @@ bool Access::canList(const CallingContext& ctx) {
+@@ -141,6 +145,9 @@ bool Access::canList(const CallingContext& ctx) {
  
  bool Access::actionAllowed(const CallingContext& sctx, const char* tctx, const char* perm,
          const std::string& tname) {
@@ -47,7 +46,7 @@ index 711038c..977b01e 100644
  #ifdef __ANDROID__
      const char* tclass = "service_manager";
  
-@@ -152,6 +161,9 @@ bool Access::actionAllowed(const CallingContext& sctx, const char* tctx, const c
+@@ -162,6 +169,9 @@ bool Access::actionAllowed(const CallingContext& sctx, const char* tctx, const c
  }
  
  bool Access::actionAllowedFromLookup(const CallingContext& sctx, const std::string& name, const char *perm) {
@@ -57,6 +56,3 @@ index 711038c..977b01e 100644
  #ifdef __ANDROID__
      char *tctx = nullptr;
      if (selabel_lookup(getSehandle(), &tctx, name.c_str(), SELABEL_CTX_ANDROID_SERVICE) != 0) {
--- 
-2.45.2
-

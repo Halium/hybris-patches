@@ -1,4 +1,4 @@
-From 9d373bd07b685c7c0e122cc1b5910400b444c1e5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: NeKit <nekit1000@gmail.com>
 Date: Sun, 5 Jul 2020 13:56:04 +0200
 Subject: [PATCH] (halium) use 127.0.0.53 as fallback DNS server
@@ -12,7 +12,7 @@ Change-Id: I3c8dd8cb4d64d7632a853b12ff8c2f066534fcad
  1 file changed, 4 insertions(+)
 
 diff --git a/libc/dns/resolv/res_init.c b/libc/dns/resolv/res_init.c
-index 2fb2a3d..be8b89d 100644
+index 2fb2a3d4c..be8b89d11 100644
 --- a/libc/dns/resolv/res_init.c
 +++ b/libc/dns/resolv/res_init.c
 @@ -200,8 +200,12 @@ __res_vinit(res_state statp, int preinit) {
@@ -28,6 +28,3 @@ index 2fb2a3d..be8b89d 100644
  #else
  	u[nserv].sin.sin_addr.s_addr = INADDR_ANY;
  #endif
--- 
-2.45.2
-

@@ -1,8 +1,8 @@
-From 56aff665cb0100a01e32d7dd3ed03deb957a1a49 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Muhammad <muhammad23012009@hotmail.com>
 Date: Sun, 11 Aug 2024 16:40:16 +0500
-Subject: [PATCH 12/12] (halium) drop android.hardware.power-ndk_export_shared
- * Link with android.hardware.power-V5-ndk ourselves * Also link with
+Subject: [PATCH] (halium) drop android.hardware.power-ndk_export_shared * Link
+ with android.hardware.power-V6-ndk ourselves * Also link with
  android.hardware.common{.fmq}
 
 Change-Id: I10eadefc12d842ae1f56ae0026c729c244c5baa3
@@ -12,7 +12,7 @@ Signed-off-by: Muhammad <muhammad23012009@hotmail.com>
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/services/powermanager/Android.bp b/services/powermanager/Android.bp
-index f7c8a81..d2e607d 100644
+index 43c124578c..e1ab093ae4 100644
 --- a/services/powermanager/Android.bp
 +++ b/services/powermanager/Android.bp
 @@ -9,7 +9,6 @@ package {
@@ -29,7 +29,7 @@ index f7c8a81..d2e607d 100644
          "android.hardware.power@1.3",
 +        "android.hardware.common-V2-ndk",
 +        "android.hardware.common.fmq-V1-ndk",
-+        "android.hardware.power-V5-ndk",
++        "android.hardware.power-V6-ndk",
      ],
  
 -    export_shared_lib_headers: [
@@ -38,10 +38,7 @@ index f7c8a81..d2e607d 100644
          "android.hardware.power@1.1",
          "android.hardware.power@1.2",
          "android.hardware.power@1.3",
-+        "android.hardware.power-V5-ndk",
++        "android.hardware.power-V6-ndk",
      ],
  
-     cflags: [
--- 
-2.45.2
-
+     whole_static_libs: [

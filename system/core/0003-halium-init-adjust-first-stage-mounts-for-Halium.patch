@@ -1,7 +1,7 @@
-From 0ab8802191ec884e2dadc8b12d318bdbd2b064a4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sat, 19 Dec 2020 21:39:09 +0200
-Subject: [PATCH 03/19] (halium) init: adjust first stage mounts for Halium
+Subject: [PATCH] (halium) init: adjust first stage mounts for Halium
 
 Change-Id: I575e5f1072e69ffec9eea9adf96988f37f393018
 Signed-off-by: Alexander Martinz <alex@amartinz.at>
@@ -12,10 +12,10 @@ Signed-off-by: Eugenio Paolantonio (g7) <me@medesimo.eu>
  2 files changed, 28 insertions(+), 8 deletions(-)
 
 diff --git a/init/first_stage_init.cpp b/init/first_stage_init.cpp
-index 1a521c6..2388d24 100644
+index e3ff6bc65e..8c7a145a17 100644
 --- a/init/first_stage_init.cpp
 +++ b/init/first_stage_init.cpp
-@@ -386,14 +386,28 @@ int FirstStageMain(int argc, char** argv) {
+@@ -402,14 +402,28 @@ int FirstStageMain(int argc, char** argv) {
      // should be done in rc files.
      // Mount staging areas for devices managed by vold
      // See storage config details at http://source.android.com/devices/storage/
@@ -48,7 +48,7 @@ index 1a521c6..2388d24 100644
  
      // /debug_ramdisk is used to preserve additional files from the debug ramdisk
      CHECKCALL(mount("tmpfs", "/debug_ramdisk", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-@@ -529,7 +543,9 @@ int FirstStageMain(int argc, char** argv) {
+@@ -540,7 +554,9 @@ int FirstStageMain(int argc, char** argv) {
  
      if (IsRecoveryMode()) {
          LOG(INFO) << "First stage mount skipped (recovery mode)";
@@ -59,7 +59,7 @@ index 1a521c6..2388d24 100644
          if (!fsm) {
              fsm = CreateFirstStageMount(cmdline);
          }
-@@ -544,7 +560,7 @@ int FirstStageMain(int argc, char** argv) {
+@@ -555,7 +571,7 @@ int FirstStageMain(int argc, char** argv) {
          if (!fsm->DoFirstStageMount()) {
              LOG(FATAL) << "Failed to mount required partitions early ...";
          }
@@ -69,10 +69,10 @@ index 1a521c6..2388d24 100644
      struct stat new_root_info {};
      if (stat("/", &new_root_info) != 0) {
 diff --git a/init/init.cpp b/init/init.cpp
-index 3fb5f7e..495b4e0 100644
+index 1771bbff9a..a5cb1c3913 100644
 --- a/init/init.cpp
 +++ b/init/init.cpp
-@@ -842,8 +842,12 @@ static void MountExtraFilesystems() {
+@@ -852,8 +852,12 @@ static void MountExtraFilesystems() {
      if ((x) != 0) PLOG(FATAL) << #x " failed.";
  
      // /apex is used to mount APEXes
@@ -87,6 +87,3 @@ index 3fb5f7e..495b4e0 100644
  
      if (NeedsTwoMountNamespaces()) {
          // /bootstrap-apex is used to mount "bootstrap" APEXes.
--- 
-2.45.2
-

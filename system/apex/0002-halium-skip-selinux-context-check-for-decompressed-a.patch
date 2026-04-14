@@ -1,0 +1,49 @@
+From 7194d3aeb8949f9b3042ff8e5bfdadad9481c37c Mon Sep 17 00:00:00 2001
+From: Steffen Deusch <steffen@deusch.me>
+Date: Fri, 3 Apr 2026 21:14:07 +0000
+Subject: [PATCH] (halium) skip SELinux context check for decompressed APEXes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When AppArmor is the active LSM (not SELinux), getfilecon() fails with
+ENODATA, causing OpenAndValidateDecompressedApex to return an error.
+This silently prevents all CAPEX decompression — apexd reports
+"activated" but no compressed APEXes are mounted.
+
+Skip the SELinux context validation when SELinux is not enabled, since
+the context check is meaningless without SELinux as the kernel LSM.
+
+Change-Id: I7b1c1116b60a2ccea11367333a649c11c7f340d4
+---
+ apexd/apexd.cpp | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/apexd/apexd.cpp b/apexd/apexd.cpp
+index 2eefe17..1c959da 100644
+--- a/apexd/apexd.cpp
++++ b/apexd/apexd.cpp
+@@ -2462,12 +2462,14 @@ Result<ApexFile> OpenAndValidateDecompressedApex(const ApexFile& capex,
+   if (!result.ok()) {
+     return result.error();
+   }
+-  auto ctx = GetfileconPath(apex_path);
+-  if (!ctx.ok()) {
+-    return ctx.error();
+-  }
+-  if (!StartsWith(*ctx, gConfig->active_apex_selinux_ctx)) {
+-    return Error() << apex_path << " has wrong SELinux context " << *ctx;
++  if (is_selinux_enabled()) {
++    auto ctx = GetfileconPath(apex_path);
++    if (!ctx.ok()) {
++      return ctx.error();
++    }
++    if (!StartsWith(*ctx, gConfig->active_apex_selinux_ctx)) {
++      return Error() << apex_path << " has wrong SELinux context " << *ctx;
++    }
+   }
+   return std::move(*apex);
+ }
+-- 
+2.43.0
+

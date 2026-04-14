@@ -1,8 +1,7 @@
-From b419dfacdab65391d337bcee8bd54fe36090eb94 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <thekit@disroot.org>
-Date: Thu, 23 Mar 2023 14:57:59 +0300
-Subject: [PATCH 18/19] (halium) init.rc: disable and do not wait for odsign
- daemon
+Date: Mon, 30 Mar 2026 00:13:41 +0000
+Subject: [PATCH] (halium) init.rc: disable and do not wait for odsign daemon
 
 Change-Id: I8193b1af06f60bd8304a04a44fc90400c54d0660
 ---
@@ -10,10 +9,10 @@ Change-Id: I8193b1af06f60bd8304a04a44fc90400c54d0660
  1 file changed, 9 insertions(+), 3 deletions(-)
 
 diff --git a/rootdir/init.rc b/rootdir/init.rc
-index 1a11e51..bfc91ec 100644
+index fc63c3bf99..8bfd941818 100644
 --- a/rootdir/init.rc
 +++ b/rootdir/init.rc
-@@ -1059,10 +1059,14 @@ on post-fs-data
+@@ -1109,10 +1109,14 @@ on post-fs-data
      # Start the on-device signing daemon, and wait for it to finish, to ensure
      # ART artifacts are generated if needed.
      # Must start after 'derive_classpath' to have *CLASSPATH variables set.
@@ -30,7 +29,7 @@ index 1a11e51..bfc91ec 100644
  
      # Bump the boot level to 1000000000; this prevents further on-device signing.
      # This is a special value that shuts down the thread which listens for
-@@ -1093,7 +1097,9 @@ on post-fs-data
+@@ -1166,7 +1170,9 @@ on bpf-progs-loaded
  # It is recommended to put unnecessary data/ initialization from post-fs-data
  # to start-zygote in device's init.rc to unblock zygote start.
  on zygote-start
@@ -38,9 +37,6 @@ index 1a11e51..bfc91ec 100644
 +    # Halium: Do not wait for odsign
 +    # wait_for_prop odsign.verification.done 1
 +
-     # A/B update verifier that marks a successful boot.
-     exec_start update_verifier
      start statsd
--- 
-2.45.2
-
+     start zygote
+     start zygote_secondary

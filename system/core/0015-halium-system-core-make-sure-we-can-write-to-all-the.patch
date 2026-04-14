@@ -1,7 +1,7 @@
-From 2cd1616c35e1464944550060528cb5b8b1c34c7b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alfred Neumayer <dev.beidl@gmail.com>
 Date: Mon, 4 Jul 2022 16:09:29 +0200
-Subject: [PATCH 15/19] (halium) system/core: make sure we can write to all the
+Subject: [PATCH] (halium) system/core: make sure we can write to all the
  partitions in recovery
 
 Change-Id: Ied66c078460bbfdfb02495adcd50dc34973bad8b
@@ -10,7 +10,7 @@ Change-Id: Ied66c078460bbfdfb02495adcd50dc34973bad8b
  1 file changed, 3 insertions(+)
 
 diff --git a/fs_mgr/fs_mgr_dm_linear.cpp b/fs_mgr/fs_mgr_dm_linear.cpp
-index e205e5a..dc3cb03 100644
+index e205e5a7e9..dc3cb03f29 100644
 --- a/fs_mgr/fs_mgr_dm_linear.cpp
 +++ b/fs_mgr/fs_mgr_dm_linear.cpp
 @@ -243,6 +243,9 @@ bool CreateLogicalPartition(CreateLogicalPartitionParams params, std::string* pa
@@ -23,6 +23,3 @@ index e205e5a..dc3cb03 100644
      DeviceMapper& dm = DeviceMapper::Instance();
      if (!dm.CreateDevice(params.device_name, table, path, params.timeout_ms)) {
          return false;
--- 
-2.45.2
-

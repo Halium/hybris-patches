@@ -1,7 +1,7 @@
-From 1aec0834a29cc3dfc094e8cbb2c1a1fa9b4aa0b4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alfonso Sanchez-Beato <alfonso.sanchez-beato@canonical.com>
 Date: Mon, 15 Feb 2016 19:36:32 +0100
-Subject: [PATCH 05/19] (halium) init: Handle udev event peaks
+Subject: [PATCH] (halium) init: Handle udev event peaks
 
 There were peaks of udev events that made poll fail with POLLERR, being
 the socket error ENOBUFS. This made ueventd exit. We increase the
@@ -16,7 +16,7 @@ Signed-off-by: Ondrej Kubik <ondrej.kubik@canonical.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/rootdir/ueventd.rc b/rootdir/ueventd.rc
-index 3927501..a177be4 100644
+index 2ff86a5e9b..d6cb4217fb 100644
 --- a/rootdir/ueventd.rc
 +++ b/rootdir/ueventd.rc
 @@ -2,7 +2,7 @@ import /vendor/etc/ueventd.rc
@@ -28,6 +28,3 @@ index 3927501..a177be4 100644
  
  subsystem graphics
      devname uevent_devpath
--- 
-2.45.2
-

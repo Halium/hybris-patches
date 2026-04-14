@@ -1,35 +1,51 @@
-From c753da804ae22121f2e01242722a1678c4793f8c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Simonas Leleiva <simonas.leleiva@meramo.co.uk>
 Date: Wed, 18 Apr 2018 18:37:09 +0200
-Subject: [PATCH 2/9] (hybris) disable tls usage in locale.cpp, to avoid
- problems with libhybris
+Subject: [PATCH] (hybris) disable tls usage in locale.cpp, to avoid problems
+ with libhybris
+
+Adapted for Android 16: USE_TLS_SLOT conditional was removed upstream.
+Now we comment out the pthread_internal.h include and use a thread_local
+variable instead of __get_bionic_tls().locale to avoid TLS conflicts
+with libhybris.
 
 Change-Id: I498a9749853e6a5a4aaa4ae93479aff083e02d4c
 Signed-off-by: Simonas Leleiva <simonas.leleiva@meramo.co.uk>
 ---
- libc/bionic/locale.cpp | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ libc/bionic/locale.cpp | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/libc/bionic/locale.cpp b/libc/bionic/locale.cpp
-index 2f4d206..feb4e45 100644
+index a1d690965..99f1b2ec6 100644
 --- a/libc/bionic/locale.cpp
 +++ b/libc/bionic/locale.cpp
-@@ -37,11 +37,11 @@
+@@ -35,7 +35,8 @@
+ #include <time.h>
+ #include <wchar.h>
  
+-#include "bionic/pthread_internal.h"
++// hybris: disable TLS slot usage to avoid problems with libhybris
++//#include "bionic/pthread_internal.h"
  #include "platform/bionic/macros.h"
  
--#if defined(__BIONIC_BUILD_FOR_ANDROID_SUPPORT)
-+//#if defined(__BIONIC_BUILD_FOR_ANDROID_SUPPORT)
- #define USE_TLS_SLOT 0
--#else
--#define USE_TLS_SLOT 1
--#endif
-+//#else
-+//#define USE_TLS_SLOT 1
-+//#endif
+ // We only support two locales, the "C" locale (also known as "POSIX"),
+@@ -74,6 +75,9 @@ size_t __ctype_get_mb_cur_max() {
+ }
  
- #if USE_TLS_SLOT
- #include "bionic/pthread_internal.h"
--- 
-2.45.2
-
+ static pthread_once_t g_locale_once = PTHREAD_ONCE_INIT;
++// hybris: use thread_local instead of bionic TLS slot
++static thread_local locale_t g_current_locale;
++
+ static lconv g_locale;
+ 
+ static void __locale_init() {
+@@ -167,7 +171,8 @@ char* setlocale(int category, const char* locale_name) {
+ }
+ 
+ static locale_t* get_current_locale_ptr() {
+-  return &__get_bionic_tls().locale;
++  // hybris: use thread_local instead of bionic TLS slot
++  return &g_current_locale;
+ }
+ 
+ locale_t uselocale(locale_t new_locale) {

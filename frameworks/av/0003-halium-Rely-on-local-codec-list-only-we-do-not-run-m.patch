@@ -1,37 +1,26 @@
-From d4b5b3b03e8124eba7d19563123a675cd0b0f7da Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Vo=C3=9F?= <thomas.voss.bochum@gmail.com>
 Date: Wed, 3 Feb 2016 17:46:38 +0100
-Subject: [PATCH 03/12] (halium) Rely on local codec list only, we do not run
+Subject: [PATCH] (halium) Rely on local codec list only, we do not run
  media.player/service.
 
 Change-Id: Iaa14db20b473c8412d9393964636754174308172
 Signed-off-by: Ondrej Kubik <ondrej.kubik@canonical.com>
 ---
- media/libstagefright/MediaCodecList.cpp | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ media/libstagefright/MediaCodecList.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/media/libstagefright/MediaCodecList.cpp b/media/libstagefright/MediaCodecList.cpp
-index 4ad3276..2685d23 100644
+index daad2c648c..f2a6d42afe 100644
 --- a/media/libstagefright/MediaCodecList.cpp
 +++ b/media/libstagefright/MediaCodecList.cpp
-@@ -181,7 +181,7 @@ void MediaCodecList::BinderDeathObserver::binderDied(const wp<IBinder> &who __un
+@@ -242,7 +242,8 @@ void MediaCodecList::BinderDeathObserver::binderDied(const wp<IBinder> &who __un
  
  // static
  sp<IMediaCodecList> MediaCodecList::getInstance() {
--    Mutex::Autolock _l(sRemoteInitMutex);
-+    /* Mutex::Autolock _l(sRemoteInitMutex);
-     if (sRemoteList == nullptr) {
-         sMediaPlayer = defaultServiceManager()->getService(String16("media.player"));
-         sp<IMediaPlayerService> service =
-@@ -199,6 +199,8 @@ sp<IMediaCodecList> MediaCodecList::getInstance() {
-         }
-     }
-     return sRemoteList;
-+    // Halium: rely on local codec list */
+-    return InstanceCache::Get().getRemoteInstance();
++    // Halium: rely on local codec list only, we do not run media.player/service.
 +    return getLocalInstance();
  }
  
  MediaCodecList::MediaCodecList(std::vector<MediaCodecListBuilderBase*> builders) {
--- 
-2.45.2
-

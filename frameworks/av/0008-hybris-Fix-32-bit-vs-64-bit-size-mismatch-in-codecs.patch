@@ -1,7 +1,7 @@
-From dcaac4fdb62d61b9af3b4d698f7ba3a83ea5c968 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matti Lehtimaki <matti.lehtimaki@jolla.com>
 Date: Thu, 5 Nov 2020 20:46:35 +0200
-Subject: [PATCH 09/12] (hybris) Fix 32-bit vs 64-bit size mismatch in codecs.
+Subject: [PATCH] (hybris) Fix 32-bit vs 64-bit size mismatch in codecs.
 
 Change-Id: Ibce3dc350c14c141a62ab14d1eca22521a9387be
 ---
@@ -9,10 +9,10 @@ Change-Id: Ibce3dc350c14c141a62ab14d1eca22521a9387be
  1 file changed, 33 insertions(+), 2 deletions(-)
 
 diff --git a/media/libstagefright/ACodec.cpp b/media/libstagefright/ACodec.cpp
-index f9ceef2..346962e 100644
+index 282212343f..5e31b686ec 100644
 --- a/media/libstagefright/ACodec.cpp
 +++ b/media/libstagefright/ACodec.cpp
-@@ -912,10 +912,11 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
+@@ -914,10 +914,11 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
              // Always allocate VideoNativeMetadata if using ANWBuffer.
              // OMX might use gralloc source internally, but we don't share
              // metadata buffer with OMX, OMX has its own headers.
@@ -26,7 +26,7 @@ index f9ceef2..346962e 100644
              }
  
              size_t conversionBufferSize = 0;
-@@ -6465,6 +6466,36 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
+@@ -6467,6 +6468,36 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                              bufferID, graphicBuffer, flags, timeUs, info->mFenceFd);
                      }
                      break;
@@ -63,6 +63,3 @@ index f9ceef2..346962e 100644
  #endif
                  default:
                      ALOGW("Can't marshall %s data in %zu sized buffers in %zu-bit mode",
--- 
-2.45.2
-

@@ -1,7 +1,7 @@
-From b4b4b7c3734229e27e50ce69cb6fd0a746369c4f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <thekit@disroot.org>
 Date: Fri, 28 Apr 2023 00:13:09 +0000
-Subject: [PATCH 11/12] (halium) libstagefright: do not wait for package_native
+Subject: [PATCH] (halium) libstagefright: do not wait for package_native
  service
 
 That service is not running in Halium and connectFormatShaper
@@ -14,10 +14,10 @@ Change-Id: I08e483f56f3707f2d925d9a11a081a5b5b6db91b
  1 file changed, 3 insertions(+)
 
 diff --git a/media/libstagefright/MediaCodec.cpp b/media/libstagefright/MediaCodec.cpp
-index e79e55b..bbf8235 100644
+index 87c2cfff40..27b02d76ad 100644
 --- a/media/libstagefright/MediaCodec.cpp
 +++ b/media/libstagefright/MediaCodec.cpp
-@@ -2587,10 +2587,13 @@ static bool connectFormatShaper() {
+@@ -3066,10 +3066,13 @@ static bool connectFormatShaper() {
          sIsHandheld = true;
          sp<IServiceManager> serviceMgr = defaultServiceManager();
          sp<content::pm::IPackageManagerNative> packageMgr;
@@ -31,6 +31,3 @@ index e79e55b..bbf8235 100644
          // if we didn't get serviceMgr, we'll leave packageMgr as default null
          if (packageMgr != nullptr) {
  
--- 
-2.45.2
-

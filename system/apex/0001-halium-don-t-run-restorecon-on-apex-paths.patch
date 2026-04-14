@@ -1,39 +1,40 @@
-From 3899bfd23d525235ff6f80d850dc2eaf9937f1cb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Muhammad <muhammad23012009@hotmail.com>
 Date: Tue, 13 Aug 2024 21:18:25 +0500
 Subject: [PATCH] (halium) don't run restorecon on apex paths
 
+Adapted for Android 16 (LineageOS 23.2): RestoreconPath call site in
+OnOtaChrootBootstrap moved. Also neuter RestoreconPath body in header.
+
 Change-Id: I00e3cc3f9e06cb0644e1f48d27f4a2663de8b6f5
 Signed-off-by: Muhammad <muhammad23012009@hotmail.com>
 ---
- apexd/apexd.cpp     | 3 ++-
+ apexd/apexd.cpp     | 2 ++
  apexd/apexd_utils.h | 3 ++-
- 2 files changed, 4 insertions(+), 2 deletions(-)
+ 2 files changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/apexd/apexd.cpp b/apexd/apexd.cpp
-index 8e539cf..6690c0a 100644
+index 3a877ac20..2eefe1759 100644
 --- a/apexd/apexd.cpp
 +++ b/apexd/apexd.cpp
-@@ -3648,12 +3648,13 @@ int OnOtaChrootBootstrap(bool also_include_staged_apexes) {
- 
-   fd.reset();
- 
+@@ -3294,10 +3294,12 @@ int OnOtaChrootBootstrap(bool also_include_staged_apexes) {
+       ctx, instance.SelectApexForActivation(), ActivationMode::kOtaChrootMode,
+       /*revert_on_error=*/false, /*fallback_on_error=*/true);
+   EmitApexInfoList(activate_status.activated, /*is_bootstrap=*/false);
 +/*
-   if (auto status = RestoreconPath(file_name); !status.ok()) {
-     LOG(ERROR) << "Failed to restorecon " << file_name << " : "
+   if (auto status = RestoreconPath(kApexInfoList); !status.ok()) {
+     LOG(ERROR) << "Can't restorecon " << kApexInfoList << ": "
                 << status.error();
-     return 1;
    }
--
 +*/
    return 0;
  }
  
 diff --git a/apexd/apexd_utils.h b/apexd/apexd_utils.h
-index d2d6566..15c02ff 100644
+index 691f0d702..419caa294 100644
 --- a/apexd/apexd_utils.h
 +++ b/apexd/apexd_utils.h
-@@ -307,10 +307,11 @@ inline android::base::Result<uintmax_t> GetFileSize(
+@@ -324,10 +324,11 @@ inline android::base::Result<void> SetLastModifiedTime(const std::string& path,
  }
  
  inline android::base::Result<void> RestoreconPath(const std::string& path) {
@@ -46,6 +47,3 @@ index d2d6566..15c02ff 100644
    return {};
  }
  
--- 
-2.45.2
-

@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Steffen Deusch <steffen@deusch.me>
+Date: Tue, 14 Apr 2026 15:34:42 +0000
+Subject: [PATCH] (halium) make __get_tls available on all architectures for
+ libhybris
+
+Change-Id: I71d6c094cc3f4cd6f5444ac063c3e7d1847bbbbf
+---
+ libc/bionic/ndk_cruft.cpp | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/libc/bionic/ndk_cruft.cpp b/libc/bionic/ndk_cruft.cpp
+index 0689000e5..a8cbccbcc 100644
+--- a/libc/bionic/ndk_cruft.cpp
++++ b/libc/bionic/ndk_cruft.cpp
+@@ -28,6 +28,12 @@
+ 
+ // This file perpetuates the mistakes of the past.
+ 
++// Halium: __get_tls needs to be available on all architectures for libhybris
++#include "platform/bionic/tls_internal.h"
++extern "C" void** __get_tls() {
++    return __get_tls_internal();
++}
++
+ // LP64 doesn't need to support any legacy cruft.
+ #if !defined(__LP64__)
+ 
+@@ -66,12 +72,7 @@
+ 
+ extern "C" {
+ 
+-// TODO: does anything still need this?
+-// with hybris we need it, so thanks for keeping it.
+-void** __get_tls() {
+-#include "platform/bionic/tls_internal.h"
+-    return __get_tls_internal();
+-}
++// __get_tls is defined above the LP64 guard for Halium/libhybris
+ 
+ // By the time any NDK-built code is running, there are plenty of threads.
+ int __isthreaded = 1;

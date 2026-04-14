@@ -1,7 +1,7 @@
-From fede7e4ba1473d21a689546c986dd15543826761 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Thu, 28 Oct 2021 13:24:54 +0000
-Subject: [PATCH 06/12] (halium) change mediaserver multilib to first
+Subject: [PATCH] (halium) change mediaserver multilib to first
 
 Needed to compile 64-bit libmedia_compat_layer
 
@@ -11,10 +11,10 @@ Change-Id: I2ab18c1ace3a2ab7c2aaf4ef0bb34bd9a957c359
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/media/mediaserver/Android.bp b/media/mediaserver/Android.bp
-index 2341af1..a0e09fe 100644
+index b5124d07d0..22cffee01b 100644
 --- a/media/mediaserver/Android.bp
 +++ b/media/mediaserver/Android.bp
-@@ -78,7 +78,7 @@ mediaserver_cc_binary {
+@@ -86,7 +86,7 @@ mediaserver_cc_binary {
      // TO ENABLE 64-BIT MEDIASERVER ON MIXED 32/64-BIT DEVICES, COMMENT
      // OUT THE FOLLOWING LINE:
      // ****************************************************************
@@ -23,6 +23,3 @@ index 2341af1..a0e09fe 100644
  
      cflags: [
          "-Werror",
--- 
-2.45.2
-

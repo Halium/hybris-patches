@@ -1,11 +1,8 @@
-From b5c00d4a90e841c33bec97ebc1a70cd3a5edcee9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Vo=C3=9F?= <thomas.voss.bochum@gmail.com>
 Date: Wed, 30 Jul 2014 23:08:00 +0200
-Subject: [PATCH 07/12] Adjust permissions of socket. Provides a connection to
- a per-user remote trust-store implementation via a unix domain socket.
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH] Adjust permissions of socket. Provides a connection to a
+ per-user remote trust-store implementation via a unix domain socket.
 
 Adjusts the connect behavior to reject a connection by an app if the application has not been trusted by the user.
 
@@ -14,14 +11,33 @@ Signed-off-by: Thomas Voß <thomas.voss@canonical.com>
 Signed-off-by: Ricardo Salveti de Araujo <rsalveti@rsalveti.net>
 Signed-off-by: Thomas Voß <thomas.voss@canonical.com>
 ---
- .../camera/libcameraservice/CameraService.cpp | 203 ++++++++++++++++++
- 1 file changed, 203 insertions(+)
+ .../camera/libcameraservice/CameraService.cpp | 253 +++++++++++++++++-
+ 1 file changed, 252 insertions(+), 1 deletion(-)
 
 diff --git a/services/camera/libcameraservice/CameraService.cpp b/services/camera/libcameraservice/CameraService.cpp
-index 1dca676..993cd28 100644
+index 64ba1d8626..38e52053c7 100644
 --- a/services/camera/libcameraservice/CameraService.cpp
 +++ b/services/camera/libcameraservice/CameraService.cpp
-@@ -63,7 +63,9 @@
+@@ -21,7 +21,9 @@
+ #include <algorithm>
+ #include <climits>
+ #include <stdio.h>
+-#include <cstdlib>
++#include <fstream>
++#include <errno.h>
++#include <string.h>
+ #include <cstring>
+ #include <ctime>
+ #include <iostream>
+@@ -34,6 +36,7 @@
+ 
+ #include <android/hardware/ICamera.h>
+ #include <android/hardware/ICameraClient.h>
++#include <android/looper.h>
+ 
+ #include <aidl/AidlCameraService.h>
+ #include <android-base/macros.h>
+@@ -66,7 +69,9 @@
  #include <mediautils/BatteryNotifier.h>
  #include <processinfo/ProcessInfoService.h>
  #include <utils/Errors.h>
@@ -31,9 +47,9 @@ index 1dca676..993cd28 100644
  #include <utils/String16.h>
  #include <utils/SystemClock.h>
  #include <utils/Trace.h>
-@@ -94,6 +96,202 @@ namespace {
-     const char* kProcessInfoServiceName = "processinfo";
- }; // namespace anonymous
+@@ -121,6 +126,242 @@ namespace {
+     }
+ } // namespace anonymous
  
 +#include <stdint.h>
 +
@@ -69,6 +85,19 @@ index 1dca676..993cd28 100644
 +    {
 +        static const int socketErrorCode = -1;
 +
++        {
++            // Keep this disabled for distros which don't carry the necessary kernel patch
++            enabled = false;
++
++            std::ifstream kernelSetting;
++            kernelSetting.open("/sys/module/binder/parameters/global_pid_lookups", std::ifstream::in);
++            if (kernelSetting.is_open()) {
++                std::string param;
++                kernelSetting >> param;
++                enabled = (param.find("Y") == 0);
++            }
++        }
++
 +        // We create a unix domain socket
 +        socketFd = ::socket(PF_UNIX, SOCK_STREAM, 0);
 +
@@ -91,7 +120,7 @@ index 1dca676..993cd28 100644
 +
 +        // And bind to the endpoint in the filesystem.
 +        static const int bindErrorCode = -1;
-+        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));        
++        int rc = ::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(sockaddr_un));
 +
 +        if (rc == bindErrorCode)
 +        {
@@ -144,6 +173,8 @@ index 1dca676..993cd28 100644
 +        static const int keepOn = 1;
 +        static const int bailOut = 0;
 +
++        ALOGD("%s", __PRETTY_FUNCTION__);
++
 +        if (fd != socketFd)
 +            return keepOn;
 +
@@ -178,6 +209,7 @@ index 1dca676..993cd28 100644
 +            ALOGE("Could not query peer credentials");
 +        } else
 +        {
++            ALOGD("%s adding uid %d fd %d", __PRETTY_FUNCTION__, peerCredentials.uid, connectionFd);
 +            android::AutoMutex am(remoteAgentsGuard);
 +            remoteAgents.add(peerCredentials.uid, connectionFd);
 +        }
@@ -188,9 +220,17 @@ index 1dca676..993cd28 100644
 +    // From android::Thread
 +    bool threadLoop()
 +    {
-+        static const int timeoutInMs = 5000;
++        static const int timeoutInMs = -1;
++        int res;
 +
-+        looper->pollOnce(timeoutInMs);
++        ALOGD("%s start", __PRETTY_FUNCTION__);
++
++        do {
++            res = looper->pollOnce(timeoutInMs);
++            ALOGD("%s res %d", __PRETTY_FUNCTION__, res);
++        } while(res != ALOOPER_POLL_ERROR);
++
++        ALOGD("%s exit", __PRETTY_FUNCTION__);
 +
 +        return exitPending();
 +    }
@@ -199,25 +239,40 @@ index 1dca676..993cd28 100644
 +    {
 +        int socket = -1;
 +
++        // If the kernel features are not enabled just let the request through.
++        // For distros which don't ship the necessary kernel patch.
++        if (!enabled)
++            return true;
++
++        ALOGD("%s uid %d pid %d", __PRETTY_FUNCTION__, uid, pid);
++
 +        // Scoping access to the known remoteAgents here.
 +        {
 +            android::AutoMutex am(remoteAgentsGuard);
 +            ssize_t idx = remoteAgents.indexOfKey(uid);
-+            if (idx == -1)
++            if (idx < 0) {
++                ALOGE("No trust store connection found for user %d", uid);
 +                return false;
++            }
 +
-+            socket = remoteAgents.keyAt(idx);
++            socket = remoteAgents[idx];
 +        }
 +
 +        Request request; request.uid = uid; request.pid = pid; request.feature = 0; request.startTime = -1;
 +
-+        if (::write(socket, &request, sizeof(Request)) == -1)
++        if (::write(socket, &request, sizeof(Request)) == -1) {
++            ALOGE("%s write error: %s (%d)", __PRETTY_FUNCTION__, strerror(errno), errno);
 +            return false;
++        }
 +
 +        int32_t answerFromSocket = denied;
 +
-+        if (::read(socket, &answerFromSocket, sizeof(::int32_t)) == -1)
++        if (::read(socket, &answerFromSocket, sizeof(::int32_t)) == -1) {
++            ALOGE("%s read error: %s (%d)", __PRETTY_FUNCTION__, strerror(errno), errno);
 +            return false;
++        }
++
++        ALOGD("%s answerFromSocket %d", __PRETTY_FUNCTION__, answerFromSocket);
 +
 +        return answerFromSocket == granted;
 +    }
@@ -226,6 +281,7 @@ index 1dca676..993cd28 100644
 +    android::sp<android::Looper> looper;
 +    android::Mutex remoteAgentsGuard;
 +    android::KeyedVector<uid_t, int> remoteAgents;
++    bool enabled;
 +};
 +
 +android::sp<TrustAgentRegistry> trust_agent_registry(new TrustAgentRegistry("/dev/socket/camera_service/camera_service_to_trust"));
@@ -234,18 +290,20 @@ index 1dca676..993cd28 100644
  namespace android {
  
  using namespace camera3;
-@@ -1806,6 +2004,11 @@ Status CameraService::validateClientPermissionsLocked(const std::string& cameraI
-     // Check if we can trust clientUid
-     if (clientUid == USE_CALLING_UID) {
-         clientUid = callingUid;
-+        // We try to reach out to a remote trust store instance to
-+        // verify that the app with uid and pid is allowed to access the
-+        // camera.
-+        if (!trust_agent_registry->verifyConnectRequestFor(clientUid, callingPid))
-+            return PERMISSION_DENIED;
-     } else if (!isTrustedCallingUid(callingUid)) {
-         ALOGE("CameraService::connect X (calling PID %d, calling UID %d) rejected "
-                 "(don't trust clientUid %d)", callingPid, callingUid, clientUid);
--- 
-2.45.2
-
+@@ -1848,6 +2089,16 @@ Status CameraService::validateClientPermissionsLocked(
+                 clientName.c_str(), clientPid, clientUid, cameraId.c_str());
+     }
+ 
++    // We try to reach out to a remote trust store instance to
++    // verify that the app with uid and pid is allowed to access the
++    // camera.
++    if (!trust_agent_registry->verifyConnectRequestFor(callingUid, callingPid))
++        return STATUS_ERROR_FMT(ERROR_PERMISSION_DENIED,
++                "Untrusted caller (calling PID %d, UID %d) trying to "
++                "forward camera access to camera %s for client %s (PID %d, UID %d)",
++                callingPid, callingUid, cameraId.c_str(),
++                clientName.c_str(), clientUid, clientPid);
++
+     // Make sure the UID is in an active state to use the camera
+     if (!mUidPolicy->isUidActive(callingUid, clientName)) {
+         int32_t procState = mUidPolicy->getProcState(callingUid);

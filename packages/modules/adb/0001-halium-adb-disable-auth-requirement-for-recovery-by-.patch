@@ -1,4 +1,4 @@
-From de25d4059fb958948d55d192184f9da80625ede2 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Martinz <amartinz@shiftphones.com>
 Date: Fri, 21 Apr 2023 14:40:48 +0500
 Subject: [PATCH] (halium) adb: disable auth requirement for recovery by
@@ -12,10 +12,10 @@ Change-Id: Ibf1a06fd9befb9fa379de591cf221db178f603fc
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/daemon/main.cpp b/daemon/main.cpp
-index 3280ac7..1a0f3e5 100644
+index 87e56dde..24d19524 100644
 --- a/daemon/main.cpp
 +++ b/daemon/main.cpp
-@@ -213,7 +213,7 @@ int adbd_main(int server_port) {
+@@ -225,7 +225,7 @@ int adbd_main() {
          // If we're on userdebug/eng or the device is unlocked, permit no-authentication.
          auth_required = android::base::GetBoolProperty("ro.adb.secure", false);
  #if defined(__ANDROID_RECOVERY__)
@@ -24,6 +24,3 @@ index 3280ac7..1a0f3e5 100644
  #endif
      }
  #endif
--- 
-2.39.2
-

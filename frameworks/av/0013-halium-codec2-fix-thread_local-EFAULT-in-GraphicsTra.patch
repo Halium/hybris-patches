@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Steffen Deusch <steffen@deusch.me>
+Date: Thu, 9 Apr 2026 16:36:57 +0000
+Subject: [PATCH] (halium) codec2: fix thread_local EFAULT in GraphicsTracker
+ pipe I/O
+
+Under libhybris, thread_local buffers in Android .so files reside in
+bionic's TLS segment. When passed to write()/read() syscalls, the
+kernel's copy_from_user() cannot access the bionic TLS address from
+glibc-created threads, causing EFAULT (errno 14).
+
+Replace thread_local with stack allocation for the pipe I/O buffers
+in writeIncDequeueableLocked() and drainDequeueableLocked(). The
+buffers are small (kMaxDequeueMax = 64 bytes) and stack allocation
+is safe here.
+
+This fixes video playback on Halium 16 where Codec2's
+GraphicsTracker pipe synchronization was completely broken, causing
+dequeueOutputBuffer to always timeout.
+
+Change-Id: Id30050bd935b909e31245301b3d0c47cbae9277d
+---
+ media/codec2/hal/client/GraphicsTracker.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/media/codec2/hal/client/GraphicsTracker.cpp b/media/codec2/hal/client/GraphicsTracker.cpp
+index 9b5c1f31c2..790cc89afa 100644
+--- a/media/codec2/hal/client/GraphicsTracker.cpp
++++ b/media/codec2/hal/client/GraphicsTracker.cpp
+@@ -650,7 +650,7 @@ void GraphicsTracker::onRequestStop() {
+ 
+ void GraphicsTracker::writeIncDequeueableLocked(int inc) {
+     CHECK(inc > 0 && inc < kMaxDequeueMax);
+-    thread_local char buf[kMaxDequeueMax];
++    char buf[kMaxDequeueMax]; // Halium: thread_local causes EFAULT under libhybris
+     if (mStopped) { // reading end closed;
+         return;
+     }
+@@ -675,7 +675,7 @@ void GraphicsTracker::writeIncDequeueableLocked(int inc) {
+ 
+ void GraphicsTracker::drainDequeueableLocked(int dec) {
+     CHECK(dec > 0 && dec < kMaxDequeueMax);
+-    thread_local char buf[kMaxDequeueMax];
++    char buf[kMaxDequeueMax]; // Halium: thread_local causes EFAULT under libhybris
+     if (mStopped) {
+         return;
+     }

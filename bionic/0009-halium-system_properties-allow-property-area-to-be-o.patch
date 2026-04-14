@@ -1,8 +1,8 @@
-From 05c7d3bd633c2d7493d55348c206612ae704e0a8 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Mon, 21 Mar 2022 22:00:10 +0200
-Subject: [PATCH 9/9] (halium) system_properties: allow property area to be
- owned by nobody user/group
+Subject: [PATCH] (halium) system_properties: allow property area to be owned
+ by nobody user/group
 
 Useful when using libhybris inside unshared user namespace containers
 
@@ -12,7 +12,7 @@ Change-Id: Idfb6408490f09674c9c56ae5bb7901e83b842cfe
  1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/libc/system_properties/prop_area.cpp b/libc/system_properties/prop_area.cpp
-index a996497..ed55941 100644
+index 0c8c1454d..3f26d5215 100644
 --- a/libc/system_properties/prop_area.cpp
 +++ b/libc/system_properties/prop_area.cpp
 @@ -114,7 +114,9 @@ prop_area* prop_area::map_fd_ro(const int fd) {
@@ -26,6 +26,3 @@ index a996497..ed55941 100644
        ((fd_stat.st_mode & (S_IWGRP | S_IWOTH)) != 0) ||
        (fd_stat.st_size < static_cast<off_t>(sizeof(prop_area)))) {
      return nullptr;
--- 
-2.45.2
-

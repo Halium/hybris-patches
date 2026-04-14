@@ -1,9 +1,9 @@
-From eabf71e76c58e0bcf2110044b399dd74e50dab4d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?=3D=3FUTF-8=3Fq=3FMatti=3D20Lehtim=3DC3=3DA4ki=3F=3D?=
  <matti.lehtimaki@gmail.com>
 Date: Fri, 21 Apr 2023 14:26:31 +0500
-Subject: [PATCH 01/12] (hybris) Use mini services and disable starting
- unneeded services.
+Subject: [PATCH] (hybris) Use mini services and disable starting unneeded
+ services.
 
 Change-Id: I25030a53012639d30d25c9b52cae662195aa3d14
 ---
@@ -11,7 +11,7 @@ Change-Id: I25030a53012639d30d25c9b52cae662195aa3d14
  1 file changed, 20 insertions(+), 4 deletions(-)
 
 diff --git a/cmds/servicemanager/servicemanager.rc b/cmds/servicemanager/servicemanager.rc
-index 6c450ab..5d32e1e 100644
+index 6c450ab4e3..5d32e1ef61 100644
 --- a/cmds/servicemanager/servicemanager.rc
 +++ b/cmds/servicemanager/servicemanager.rc
 @@ -5,11 +5,27 @@ service servicemanager /system/bin/servicemanager
@@ -46,6 +46,3 @@ index 6c450ab..5d32e1e 100644
 +    class main
 +    user system
 +    group audio
--- 
-2.45.2
-

@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Sun, 16 Jul 2023 21:39:02 +0000
+Subject: [PATCH] (halium) libgui: do not attempt to get SurfaceFlinger service
+
+Disable waitForService calls for both SurfaceFlinger (HIDL) and
+SurfaceFlingerAIDL services, as neither runs in the Halium container.
+Also guard methods that would block waiting for the compositor.
+
+Change-Id: I98090cf977d3c3c3e4fbbda3a244c0823e1bb5b3
+---
+ libs/gui/Surface.cpp               | 22 ++++++++++++++++++++--
+ libs/gui/SurfaceComposerClient.cpp |  8 ++++++++
+ 2 files changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/libs/gui/Surface.cpp b/libs/gui/Surface.cpp
+index cabc1773e0..a75db13c6d 100644
+--- a/libs/gui/Surface.cpp
++++ b/libs/gui/Surface.cpp
+@@ -195,11 +195,17 @@ sp<Surface> Surface::from(ANativeWindow* anw) {
+ 
+ #ifndef NO_BINDER
+ sp<ISurfaceComposer> Surface::composerService() const {
+-    return ComposerService::getComposerService();
++    // Halium: SurfaceFlinger is not running
++    // return ComposerService::getComposerService();
++
++    return nullptr;
+ }
+ 
+ sp<gui::ISurfaceComposer> Surface::composerServiceAIDL() const {
+-    return ComposerServiceAIDL::getComposerService();
++    // Halium: SurfaceFlinger is not running
++    // return ComposerServiceAIDL::getComposerService();
++
++    return nullptr;
+ }
+ #endif
+ 
+@@ -256,6 +262,10 @@ status_t Surface::getLastQueuedBuffer(sp<GraphicBuffer>* outBuffer,
+ status_t Surface::getDisplayRefreshCycleDuration(nsecs_t* outRefreshDuration) {
+     ATRACE_CALL();
+ 
++    // Halium: SurfaceFlinger is not running
++    if (composerService() == nullptr)
++        return NO_ERROR;
++
+ #ifdef NO_BINDER
+     (void)outRefreshDuration;
+     return INVALID_OPERATION;
+@@ -1478,6 +1488,10 @@ int Surface::queueBuffers(const std::vector<BatchQueuedBuffer>& buffers,
+ }
+ 
+ void Surface::querySupportedTimestampsLocked() const {
++    // Halium: SurfaceFlinger is not running
++    if (composerService() == nullptr)
++        return;
++
+ #ifdef NO_BINDER
+     LOG_ALWAYS_FATAL("Surface::querySupportedTimestampsLocked not supported in NO_BINDER mode");
+ #else
+@@ -3042,6 +3056,10 @@ void Surface::ProducerListenerProxy::onBuffersDiscarded(const std::vector<int32_
+ 
+ status_t Surface::setFrameRate(float frameRate, int8_t compatibility,
+                                int8_t changeFrameRateStrategy) {
++
++    // Halium: Disabled
++    return NO_ERROR;
++
+     status_t err = mGraphicBufferProducer->setFrameRate(frameRate, compatibility,
+                                                         changeFrameRateStrategy);
+     SURF_LOGE_IF(err, "IGraphicBufferProducer::setFrameRate(%.2f) returned %s", frameRate,
+diff --git a/libs/gui/SurfaceComposerClient.cpp b/libs/gui/SurfaceComposerClient.cpp
+index 8546b0c361..3122bdda72 100644
+--- a/libs/gui/SurfaceComposerClient.cpp
++++ b/libs/gui/SurfaceComposerClient.cpp
+@@ -106,8 +106,12 @@ ComposerService::ComposerService() : Singleton<ComposerService>() {
+ }
+ 
+ bool ComposerService::connectLocked() {
++
++    // Halium: Disabled
++    /*
+     const String16 name("SurfaceFlinger");
+     mComposerService = waitForService<ISurfaceComposer>(name);
++    */
+     if (mComposerService == nullptr) {
+         return false; // fatal error or permission problem
+     }
+@@ -152,8 +156,12 @@ ComposerServiceAIDL::ComposerServiceAIDL() : Singleton<ComposerServiceAIDL>() {
+ }
+ 
+ bool ComposerServiceAIDL::connectLocked() {
++
++    // Halium: Disabled
++    /*
+     const String16 name("SurfaceFlingerAIDL");
+     mComposerService = waitForService<gui::ISurfaceComposer>(name);
++    */
+     if (mComposerService == nullptr) {
+         return false; // fatal error or permission problem
+     }

@@ -1,7 +1,7 @@
-From 63b288a450fc8936db960550e31a03de75160650 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Muhammad <muhammad23012009@hotmail.com>
 Date: Wed, 19 Jul 2023 15:41:46 +0500
-Subject: [PATCH 19/19] (halium) storaged: don't wait for package_native
+Subject: [PATCH] (halium) storaged: don't wait for package_native
 
 Change-Id: I469a70017f245c4c9218ff33e2a02c7fa8e64eb4
 Signed-off-by: Muhammad <muhammad23012009@hotmail.com>
@@ -10,7 +10,7 @@ Signed-off-by: Muhammad <muhammad23012009@hotmail.com>
  1 file changed, 6 insertions(+)
 
 diff --git a/storaged/storaged_uid_monitor.cpp b/storaged/storaged_uid_monitor.cpp
-index f47bf72..71c5f3a 100644
+index f47bf72b3c..71c5f3a39a 100644
 --- a/storaged/storaged_uid_monitor.cpp
 +++ b/storaged/storaged_uid_monitor.cpp
 @@ -125,11 +125,17 @@ void get_uid_names(const vector<int>& uids, const vector<std::string*>& uid_name
@@ -31,6 +31,3 @@ index f47bf72..71c5f3a 100644
  
      sp<IPackageManagerNative> package_mgr = interface_cast<IPackageManagerNative>(binder);
      std::vector<std::string> names;
--- 
-2.45.2
-

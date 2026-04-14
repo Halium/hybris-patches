@@ -1,7 +1,7 @@
-From 42cf72974048799c5a56a047026701d6a73d9318 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Tue, 10 Jan 2023 13:57:11 +0000
-Subject: [PATCH 10/12] (halium) libpowermanager: statically link
+Subject: [PATCH] (halium) libpowermanager: statically link
  android.hardware.power
 
 A hack to get libmediandk with Halium changes that pull in
@@ -13,7 +13,7 @@ Change-Id: Ie7505c96a0c3b32f787c2c597855b63399101c73
  1 file changed, 4 insertions(+)
 
 diff --git a/services/powermanager/Android.bp b/services/powermanager/Android.bp
-index 1f72e8b..f7c8a81 100644
+index 78f8f7bd96..43c124578c 100644
 --- a/services/powermanager/Android.bp
 +++ b/services/powermanager/Android.bp
 @@ -35,9 +35,13 @@ cc_library_shared {
@@ -30,6 +30,3 @@ index 1f72e8b..f7c8a81 100644
          "android.hardware.power@1.0",
          "android.hardware.power@1.1",
          "android.hardware.power@1.2",
--- 
-2.45.2
-

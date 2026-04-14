@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Steffen Deusch <steffen@deusch.me>
+Date: Tue, 14 Apr 2026 22:31:00 +0000
+Subject: [PATCH] halium: libgui link libgui_aidl_static as whole-static
+
+`libgui_aidl_static` needs to be linked as a whole static library in this
+Halium tree. Keeping it in `static_libs` drops needed objects at link time.
+
+Change-Id: I69904b8b0b49400cb952f3ac340343751756f9e0
+---
+ libs/gui/Android.bp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libs/gui/Android.bp b/libs/gui/Android.bp
+index 449692cb62..4cc87a7c69 100644
+--- a/libs/gui/Android.bp
++++ b/libs/gui/Android.bp
+@@ -346,10 +346,12 @@ cc_defaults {
+         "--header-filter=^.*frameworks/native/libs/gui/.*.h$",
+     ],
+     static_libs: [
+-        "libgui_aidl_static",
+         "libgui_window_info_static",
+         "libguiflags",
+     ],
++    whole_static_libs: [
++        "libgui_aidl_static",
++    ],
+     shared_libs: [
+         "libbinder",
+         "libGLESv2",

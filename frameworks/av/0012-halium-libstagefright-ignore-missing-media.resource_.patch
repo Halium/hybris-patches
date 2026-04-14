@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <thekit@disroot.org>
-Date: Wed, 9 Oct 2024 13:13:52 +0000
+Date: Thu, 18 Jun 2026 18:25:30 +0300
 Subject: [PATCH] (halium) libstagefright: ignore missing
  media.resource_manager service
 
@@ -8,16 +8,16 @@ ResourceManagerService status wasn't checked until commit cf3bafbfe,
 and as the nullptr checks in proxy are still in place, do not abort
 codec initialization if the service is missing.
 
-Change-Id: Ica428d691bec8e88405fed74a84e905579fc4a9d
+Change-Id: I84e96dd3f5c5192bd2d52b46038229c9cda16ed8
 ---
- media/libstagefright/MediaCodec.cpp | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ media/libstagefright/MediaCodec.cpp | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
 
 diff --git a/media/libstagefright/MediaCodec.cpp b/media/libstagefright/MediaCodec.cpp
-index bbf8235..eef0ae9 100644
+index 27b02d76ad..f7697637dd 100644
 --- a/media/libstagefright/MediaCodec.cpp
 +++ b/media/libstagefright/MediaCodec.cpp
-@@ -340,7 +340,8 @@ struct ResourceManagerClient : public BnResourceManagerClient {
+@@ -354,7 +354,8 @@ struct ResourceManagerClient : public BnResourceManagerClient {
          sp<MediaCodec> codec = mMediaCodec.promote();
          if (codec == NULL) {
              // Codec is already gone, so remove the resources as well
@@ -27,7 +27,7 @@ index bbf8235..eef0ae9 100644
              std::shared_ptr<IResourceManagerService> service =
                      IResourceManagerService::fromBinder(binder);
              if (service == nullptr) {
-@@ -566,7 +567,8 @@ std::shared_ptr<IResourceManagerService> MediaCodec::ResourceManagerServiceProxy
+@@ -583,7 +584,8 @@ std::shared_ptr<IResourceManagerService> MediaCodec::ResourceManagerServiceProxy
      }
  
      // Get binder interface to resource manager.
@@ -36,4 +36,14 @@ index bbf8235..eef0ae9 100644
 +    ::ndk::SpAIBinder binder(AServiceManager_checkService("media.resource_manager"));
      mService = IResourceManagerService::fromBinder(binder);
      if (mService == nullptr) {
+         ALOGE("Failed to get ResourceManagerService");
+@@ -1468,7 +1470,8 @@ status_t MediaCodec::getGloballyAvailableResources(std::vector<GlobalResourceInf
+     }
+ 
+     // Get binder interface to resource manager.
+-    ::ndk::SpAIBinder binder(AServiceManager_waitForService("media.resource_manager"));
++    // Halium: use AServiceManager_checkService which does not block if not running
++    ::ndk::SpAIBinder binder(AServiceManager_checkService("media.resource_manager"));
+     std::shared_ptr<IResourceManagerService> service = IResourceManagerService::fromBinder(binder);
+     if (service == nullptr) {
          ALOGE("Failed to get ResourceManagerService");

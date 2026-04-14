@@ -1,7 +1,7 @@
-From c4bb80c68a9d14c9efc5937493f9754eac9ddbc5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Sun, 3 Oct 2021 12:38:06 +0300
-Subject: [PATCH 8/9] (halium) disable fdsan as it interferes with libhybris
+Subject: [PATCH] (halium) disable fdsan as it interferes with libhybris
 
 Might be not needed once libhybris hooks the relevant functions.
 
@@ -11,10 +11,10 @@ Change-Id: If018e4b6bf09c72f1216f4945d6246831997e683
  1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/libc/bionic/fdsan.cpp b/libc/bionic/fdsan.cpp
-index 0b0678b..274581b 100644
+index 382696cb3..88caf57c8 100644
 --- a/libc/bionic/fdsan.cpp
 +++ b/libc/bionic/fdsan.cpp
-@@ -127,7 +127,9 @@ static FdEntry* GetFdEntry(int fd) {
+@@ -126,7 +126,9 @@ static FdEntry* GetFdEntry(int fd) {
      return nullptr;
    }
  
@@ -25,7 +25,7 @@ index 0b0678b..274581b 100644
  }
  
  __printflike(1, 0) static void fdsan_error(const char* fmt, ...) {
-@@ -247,11 +249,11 @@ int android_fdsan_close_with_tag(int fd, uint64_t expected_tag) {
+@@ -246,11 +248,11 @@ int android_fdsan_close_with_tag(int fd, uint64_t expected_tag) {
      return __close(fd);
    }
  
@@ -38,6 +38,3 @@ index 0b0678b..274581b 100644
  
    uint64_t tag = expected_tag;
    if (!atomic_compare_exchange_strong(&fde->close_tag, &tag, 0)) {
--- 
-2.45.2
-

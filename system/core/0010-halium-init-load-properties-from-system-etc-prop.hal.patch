@@ -1,8 +1,8 @@
-From 855a1860b2585371e83a3204e3c0d7be76c75138 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: TheKit <nekit1000@gmail.com>
 Date: Mon, 16 May 2022 16:16:37 +0300
-Subject: [PATCH 10/19] (halium) init: load properties from
- (/system/etc)/prop.halium last
+Subject: [PATCH] (halium) init: load properties from (/system/etc)/prop.halium
+ last
 
 This can be used to override property values set in any other property
 files, including "ro." properties.
@@ -13,10 +13,10 @@ Change-Id: I8445a6613a471444d5aace295ce049e3b88e19ed
  1 file changed, 6 insertions(+)
 
 diff --git a/init/property_service.cpp b/init/property_service.cpp
-index fba383c..ca0664c 100644
+index fe1145e1f0..40fbe6263e 100644
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -1218,6 +1218,12 @@ void PropertyLoadBootDefaults() {
+@@ -1200,6 +1200,12 @@ void PropertyLoadBootDefaults() {
      load_properties_from_partition("odm", /* support_legacy_path_until */ 28);
      load_properties_from_partition("product", /* support_legacy_path_until */ 30);
  
@@ -29,6 +29,3 @@ index fba383c..ca0664c 100644
      if (access(kDebugRamdiskProp, R_OK) == 0) {
          LOG(INFO) << "Loading " << kDebugRamdiskProp;
          if (auto res = load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);
--- 
-2.45.2
-

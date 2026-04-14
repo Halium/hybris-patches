@@ -1,8 +1,7 @@
-From e152d90db64684ef7abede1473b183b548dae5a4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alfred Neumayer <dev.beidl@gmail.com>
-Date: Sun, 12 Dec 2021 17:24:57 +0100
-Subject: [PATCH 12/19] (halium) init.rc: Create directory for trust-store
- socket
+Date: Mon, 30 Mar 2026 00:13:00 +0000
+Subject: [PATCH] (halium) init.rc: Create directory for trust-store socket
 
 This enables the minimediaservice process to create the socket
 in a well-known location for consumption by trust-store.
@@ -13,10 +12,10 @@ Change-Id: I322d3743a85d55273cf90e78faf662e53c6a1376
  1 file changed, 5 insertions(+)
 
 diff --git a/rootdir/init.rc b/rootdir/init.rc
-index 85a2118..e931c39 100644
+index 698446b132..8b2aad260a 100644
 --- a/rootdir/init.rc
 +++ b/rootdir/init.rc
-@@ -492,6 +492,11 @@ on init
+@@ -508,6 +508,11 @@ on init
      start hwservicemanager
      start vndservicemanager
  
@@ -25,9 +24,6 @@ index 85a2118..e931c39 100644
 +    chown root camera /dev/socket/camera_service
 +    chmod 0775 /dev/socket/camera_service
 +
- # Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
- import /system/etc/init/hw/init.boringssl.${ro.zygote}.rc
- 
--- 
-2.45.2
-
+     # Mount /mnt/vm ASAP to allow early VMs to run.
+     mkdir /mnt/vm 0755 root root
+     mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw

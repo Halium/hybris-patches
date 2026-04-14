@@ -1,7 +1,7 @@
-From 7f9eb8532c3b64870c04645d88702fa1fce91248 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matti Lehtimaki <matti.lehtimaki@gmail.com>
 Date: Thu, 5 Nov 2020 20:50:40 +0200
-Subject: [PATCH 09/12] (hybris) Add native buffer compat define.
+Subject: [PATCH] (hybris) Add native buffer compat define.
 
 Change-Id: Iaa50a8270fc822fa3aacec07a5dcdfc467752afe
 ---
@@ -9,7 +9,7 @@ Change-Id: Iaa50a8270fc822fa3aacec07a5dcdfc467752afe
  1 file changed, 14 insertions(+)
 
 diff --git a/headers/media_plugin/media/hardware/HardwareAPI.h b/headers/media_plugin/media/hardware/HardwareAPI.h
-index ae0220a..05e9559 100644
+index ae0220a5eb..05e9559a5a 100644
 --- a/headers/media_plugin/media/hardware/HardwareAPI.h
 +++ b/headers/media_plugin/media/hardware/HardwareAPI.h
 @@ -150,6 +150,12 @@ struct VideoNativeMetadata {
@@ -40,6 +40,3 @@ index ae0220a..05e9559 100644
  // A pointer to this struct is passed to OMX_SetParameter() when the extension
  // index "OMX.google.android.index.prepareForAdaptivePlayback" is given.
  //
--- 
-2.45.2
-

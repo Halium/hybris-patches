@@ -1,41 +1,45 @@
-From 2b22da18359e28be5d2bba5657fd43f32c09d5c1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Franz-Josef Haider <franz.haider@jolla.com>
 Date: Thu, 8 Oct 2020 14:43:42 +0000
-Subject: [PATCH 4/9] (hybris) Fix __get_tls and related functions (>=Android
- 10)
+Subject: [PATCH] (hybris) Fix __get_tls and related functions (>=Android 10)
+
+Adapted for Android 16: __get_tls changed from macros to static inline
+functions. We replace them with extern declarations so libhybris can
+intercept TLS access. __set_tls functions are preserved as-is.
+Added riscv support in tls_internal.h (new in A16).
 
 Signed-off-by: Simonas Leleiva <simonas.leleiva@jolla.com>
 Change-Id: I24486873be638a1a8cd123705ba2e51ec7414b94
 ---
  libc/Android.bp                         |  1 +
- libc/bionic/ndk_cruft.cpp               | 16 +++++----
+ libc/bionic/ndk_cruft.cpp               | 12 ++++---
  libc/bionic/pthread_internal.h          |  6 ++--
  libc/hybris_support.c                   |  4 +++
  libc/libc.map.txt                       |  1 +
- libc/platform/bionic/tls.h              | 22 ++++++------
- libc/platform/bionic/tls_internal.h     | 45 +++++++++++++++++++++++++
+ libc/platform/bionic/tls.h              | 41 ++++++----------------
+ libc/platform/bionic/tls_internal.h     | 46 +++++++++++++++++++++++++
  libc/platform/scudo_platform_tls_slot.h |  2 +-
- 8 files changed, 75 insertions(+), 22 deletions(-)
+ 8 files changed, 75 insertions(+), 38 deletions(-)
  create mode 100644 libc/hybris_support.c
  create mode 100644 libc/platform/bionic/tls_internal.h
 
 diff --git a/libc/Android.bp b/libc/Android.bp
-index fd14aea..990c8bc 100644
+index efba83b6e..acea5c9a1 100644
 --- a/libc/Android.bp
 +++ b/libc/Android.bp
-@@ -1038,6 +1038,7 @@ cc_library_static {
+@@ -975,6 +975,7 @@ cc_library_static {
          "stdio/stdio_ext.cpp",
          "stdio/vfscanf.cpp",
          "stdio/vfwscanf.cpp",
 +        "hybris_support.c",
+     ],
  
-         // TODO: why isn't this in a static-libc-only module?
-         // This contains a weak stub implementation of __find_icu_symbol for wctype.cpp,
+     arch: {
 diff --git a/libc/bionic/ndk_cruft.cpp b/libc/bionic/ndk_cruft.cpp
-index b15a317..824982a 100644
+index bc06d9dc6..0689000e5 100644
 --- a/libc/bionic/ndk_cruft.cpp
 +++ b/libc/bionic/ndk_cruft.cpp
-@@ -49,6 +49,13 @@
+@@ -66,6 +66,13 @@
  
  extern "C" {
  
@@ -46,36 +50,27 @@ index b15a317..824982a 100644
 +    return __get_tls_internal();
 +}
 +
- // LP64 doesn't need to support any legacy cruft.
- #if !defined(__LP64__)
+ // By the time any NDK-built code is running, there are plenty of threads.
+ int __isthreaded = 1;
  
-@@ -71,11 +78,8 @@ int __open() {
+@@ -85,10 +92,7 @@ int __open() {
    abort();
  }
  
 -// TODO: does anything still need this?
 -void** __get_tls() {
--#include "platform/bionic/tls.h"
--  return __get_tls();
+-  return __real_get_tls();
 -}
-+
 +
  
  // This non-standard function was in our <string.h> for some reason.
  void memswap(void* m1, void* m2, size_t n) {
-@@ -390,4 +394,4 @@ int putw(int value, FILE* fp) {
- 
- #endif // !defined (__LP64__)
- 
--} // extern "C"
-+} // extern "C"
-\ No newline at end of file
 diff --git a/libc/bionic/pthread_internal.h b/libc/bionic/pthread_internal.h
-index 091f711..90b43ea 100644
+index b3133a92d..722c761a6 100644
 --- a/libc/bionic/pthread_internal.h
 +++ b/libc/bionic/pthread_internal.h
-@@ -211,16 +211,16 @@ __LIBC_HIDDEN__ void __pthread_internal_remove_and_free(pthread_internal_t* thre
- __LIBC_HIDDEN__ void __find_main_stack_limits(uintptr_t* low, uintptr_t* high);
+@@ -223,16 +223,16 @@ __LIBC_HIDDEN__ void* __allocate_stack_mte_ringbuffer(size_t n, pthread_internal
+ #endif
  
  static inline __always_inline bionic_tcb* __get_bionic_tcb() {
 -  return reinterpret_cast<bionic_tcb*>(&__get_tls()[MIN_TLS_SLOT]);
@@ -96,7 +91,7 @@ index 091f711..90b43ea 100644
  static inline __always_inline TlsDtv* __get_tcb_dtv(bionic_tcb* tcb) {
 diff --git a/libc/hybris_support.c b/libc/hybris_support.c
 new file mode 100644
-index 0000000..2784c85
+index 000000000..2784c85ec
 --- /dev/null
 +++ b/libc/hybris_support.c
 @@ -0,0 +1,4 @@
@@ -105,7 +100,7 @@ index 0000000..2784c85
 +  return __get_tls_internal();
 +}
 diff --git a/libc/libc.map.txt b/libc/libc.map.txt
-index 2c8ec07..73dc54c 100644
+index 3e9f8505f..d5bfad052 100644
 --- a/libc/libc.map.txt
 +++ b/libc/libc.map.txt
 @@ -40,6 +40,7 @@ LIBC {
@@ -114,47 +109,99 @@ index 2c8ec07..73dc54c 100644
      __fwritable; # introduced=23
 +    __get_tls_hooks; # arm arm64 x86 introduced=21
      __get_h_errno;
-     __getcpu; # arm x86 introduced-arm=12 introduced-x86=12
+     __getcpu; # arm x86
      __getcwd; # arm x86
 diff --git a/libc/platform/bionic/tls.h b/libc/platform/bionic/tls.h
-index e01eccd..7bb292a 100644
+index 3e0ef53c6..59e078ff8 100644
 --- a/libc/platform/bionic/tls.h
 +++ b/libc/platform/bionic/tls.h
-@@ -28,18 +28,16 @@
+@@ -30,13 +30,16 @@
  
- #pragma once
+ #include <sys/cdefs.h>
  
 -#if defined(__aarch64__)
--# define __get_tls() ({ void** __val; __asm__("mrs %0, tpidr_el0" : "=r"(__val)); __val; })
--#elif defined(__arm__)
--# define __get_tls() ({ void** __val; __asm__("mrc p15, 0, %0, c13, c0, 3" : "=r"(__val)); __val; })
--#elif defined(__i386__)
--# define __get_tls() ({ void** __val; __asm__("movl %%gs:0, %0" : "=r"(__val)); __val; })
--#elif defined(__riscv)
--# define __get_tls() ({ void** __val; __asm__("mv %0, tp" : "=r"(__val)); __val; })
--#elif defined(__x86_64__)
--# define __get_tls() ({ void** __val; __asm__("mov %%fs:0, %0" : "=r"(__val)); __val; })
--#else
--#error unsupported architecture
+-
+-static inline void** __get_tls(void) {
+-  void** result;
+-  __asm__("mrs %0, tpidr_el0" : "=r"(result));
+-  return result;
 +#ifdef __cplusplus
 +extern "C" {
-+ 
- #endif
-+void **__get_tls(void);
-+void **__get_tls_hooks(void);
++#endif
++void** __get_tls(void);
++void** __get_tls_hooks(void);
 +#ifdef __cplusplus
-+}
+ }
 +#endif
 +
-+#include "tls_internal.h"
++#if defined(__aarch64__)
  
+ static inline void __set_tls(void* tls) {
+   __asm__("msr tpidr_el0, %0" : : "r" (tls));
+@@ -44,12 +47,6 @@ static inline void __set_tls(void* tls) {
+ 
+ #elif defined(__arm__)
+ 
+-static inline void** __get_tls(void) {
+-  void** result;
+-  __asm__("mrc p15, 0, %0, c13, c0, 3" : "=r"(result));
+-  return result;
+-}
+-
+ // arm32 requires a syscall to set the thread pointer.
+ // By historical accident it's public API, but not in any header except this one.
+ __BEGIN_DECLS
+@@ -58,12 +55,6 @@ __END_DECLS
+ 
+ #elif defined(__i386__)
+ 
+-static inline void** __get_tls(void) {
+-  void** result;
+-  __asm__("movl %%gs:0, %0" : "=r"(result));
+-  return result;
+-}
+-
+ // x86 is really hairy, so we keep that out of line.
+ __BEGIN_DECLS
+ int __set_tls(void* tls);
+@@ -71,24 +62,12 @@ __END_DECLS
+ 
+ #elif defined(__riscv)
+ 
+-static inline void** __get_tls(void) {
+-  void** result;
+-  __asm__("mv %0, tp" : "=r"(result));
+-  return result;
+-}
+-
+ static inline void __set_tls(void* tls) {
+   __asm__("mv tp, %0" : : "r"(tls));
+ }
+ 
+ #elif defined(__x86_64__)
+ 
+-static inline void** __get_tls(void) {
+-  void** result;
+-  __asm__("mov %%fs:0, %0" : "=r"(result));
+-  return result;
+-}
+-
+ // ARCH_SET_FS is not exposed via <sys/prctl.h> or <linux/prctl.h>.
+ #include <asm/prctl.h>
+ // This syscall stub is generated but it's not declared in any header.
+@@ -104,4 +83,6 @@ static inline int __set_tls(void* tls) {
+ #error unsupported architecture
+ #endif
+ 
++#include "tls_internal.h"
++
  #include "tls_defines.h"
 diff --git a/libc/platform/bionic/tls_internal.h b/libc/platform/bionic/tls_internal.h
 new file mode 100644
-index 0000000..690ceac
+index 000000000..cadfd2c9d
 --- /dev/null
 +++ b/libc/platform/bionic/tls_internal.h
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,46 @@
 +/*
 + * Copyright (C) 2008 The Android Open Source Project
 + * All rights reserved.
@@ -192,6 +239,8 @@ index 0000000..690ceac
 +# define __get_tls_internal() ({ void** __val; __asm__("mrc p15, 0, %0, c13, c0, 3" : "=r"(__val)); __val; })
 +#elif defined(__i386__)
 +# define __get_tls_internal() ({ void** __val; __asm__("movl %%gs:0, %0" : "=r"(__val)); __val; })
++#elif defined(__riscv)
++# define __get_tls_internal() ({ void** __val; __asm__("mv %0, tp" : "=r"(__val)); __val; })
 +#elif defined(__x86_64__)
 +# define __get_tls_internal() ({ void** __val; __asm__("mov %%fs:0, %0" : "=r"(__val)); __val; })
 +#else
@@ -199,9 +248,8 @@ index 0000000..690ceac
 +#endif
 +
 +#endif /* __BIONIC_PRIVATE_GET_TLS_INTERNAL_H_ */
-+
 diff --git a/libc/platform/scudo_platform_tls_slot.h b/libc/platform/scudo_platform_tls_slot.h
-index a86b828..f668e83 100644
+index a86b828f2..f668e83b9 100644
 --- a/libc/platform/scudo_platform_tls_slot.h
 +++ b/libc/platform/scudo_platform_tls_slot.h
 @@ -31,5 +31,5 @@
@@ -211,6 +259,3 @@ index a86b828..f668e83 100644
 -  return reinterpret_cast<uintptr_t*>(&__get_tls()[TLS_SLOT_SANITIZER]);
 +  return reinterpret_cast<uintptr_t*>(&__get_tls_hooks()[TLS_SLOT_SANITIZER]);
  }
--- 
-2.45.2
-
