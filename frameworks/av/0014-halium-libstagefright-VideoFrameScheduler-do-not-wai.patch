@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Steffen Deusch <steffen@deusch.me>
+Date: Tue, 14 Apr 2026 22:30:00 +0000
+Subject: [PATCH] (halium) libstagefright: VideoFrameScheduler: do not wait for
+ SurfaceFlinger
+
+Change-Id: I27415aeb946affce117f2b255dad33dba71a24ec
+---
+ media/libstagefright/VideoFrameScheduler.cpp | 22 ++------------------
+ 1 file changed, 2 insertions(+), 20 deletions(-)
+
+diff --git a/media/libstagefright/VideoFrameScheduler.cpp b/media/libstagefright/VideoFrameScheduler.cpp
+index de8e425652..5ff2930828 100644
+--- a/media/libstagefright/VideoFrameScheduler.cpp
++++ b/media/libstagefright/VideoFrameScheduler.cpp
+@@ -39,26 +39,8 @@ void VideoFrameScheduler::updateVsync() {
+     mVsyncTime = 0;
+     mVsyncPeriod = 0;
+ 
+-    // TODO(b/220021255): wrap this into SurfaceComposerClient
+-    if (mComposer == NULL) {
+-        String16 name("SurfaceFlingerAIDL");
+-        sp<IServiceManager> sm = defaultServiceManager();
+-        mComposer = interface_cast<gui::ISurfaceComposer>(sm->checkService(name));
+-    }
+-    if (mComposer != NULL) {
+-        gui::DisplayStatInfo stats;
+-        binder::Status status = mComposer->getDisplayStats(nullptr/* display */, &stats);
+-        if (status.isOk()) {
+-            ALOGV("vsync time:%lld period:%lld",
+-                    (long long)stats.vsyncTime, (long long)stats.vsyncPeriod);
+-            mVsyncTime = stats.vsyncTime;
+-            mVsyncPeriod = stats.vsyncPeriod;
+-        } else {
+-            ALOGW("getDisplayStats returned %d", status.transactionError());
+-        }
+-    } else {
+-        ALOGW("could not get surface mComposer service");
+-    }
++    // Halium: SurfaceFlinger is not running in the container
++    ALOGW("VideoFrameScheduler: SurfaceFlinger not available (Halium)");
+ }
+ 
+ void VideoFrameScheduler::release() {
