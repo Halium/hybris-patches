@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jami Kettunen <jami.kettunen@protonmail.com>
+Date: Tue, 5 May 2026 21:54:49 +0300
+Subject: [PATCH] (halium) fastboot: don't request AIDL HALs for UBports
+ recovery
+
+Including servicemanager.recovery bloats the gzipped recoveryramdisk
+cpio by another ~300 KiB (from around 15 MiB) while these don't appear
+to be critical for our usual bootstrapping means FastbootD would be used
+for on some Ubuntu Touch devices/setups.
+
+Change-Id: I9c03b9fa013610d7495f7ba3cc60d9d9b17dd227
+---
+ fastboot/device/fastboot_device.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/fastboot/device/fastboot_device.cpp b/fastboot/device/fastboot_device.cpp
+index 0dc4e9764..65849759d 100644
+--- a/fastboot/device/fastboot_device.cpp
++++ b/fastboot/device/fastboot_device.cpp
+@@ -110,9 +110,11 @@ FastbootDevice::FastbootDevice()
+               {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
+               {FB_CMD_FETCH, FetchHandler},
+       }),
++#if DISABLED_FOR_UBPORTS_RECOVERY
+       boot_control_hal_(BootControlClient::WaitForService()),
+       health_hal_(get_health_service()),
+       fastboot_hal_(get_fastboot_service()),
++#endif
+       active_slot_("") {
+     if (android::base::GetProperty("fastbootd.protocol", "usb") == "tcp") {
+         transport_ = std::make_unique<ClientTcpTransport>();
