@@ -1,4 +1,4 @@
-From 7194d3aeb8949f9b3042ff8e5bfdadad9481c37c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Steffen Deusch <steffen@deusch.me>
 Date: Fri, 3 Apr 2026 21:14:07 +0000
 Subject: [PATCH] (halium) skip SELinux context check for decompressed APEXes
@@ -20,7 +20,7 @@ Change-Id: I7b1c1116b60a2ccea11367333a649c11c7f340d4
  1 file changed, 8 insertions(+), 6 deletions(-)
 
 diff --git a/apexd/apexd.cpp b/apexd/apexd.cpp
-index 2eefe17..1c959da 100644
+index 2eefe1759..1c959da52 100644
 --- a/apexd/apexd.cpp
 +++ b/apexd/apexd.cpp
 @@ -2462,12 +2462,14 @@ Result<ApexFile> OpenAndValidateDecompressedApex(const ApexFile& capex,
@@ -44,6 +44,3 @@ index 2eefe17..1c959da 100644
    }
    return std::move(*apex);
  }
--- 
-2.43.0
-
