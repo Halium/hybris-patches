@@ -1,0 +1,245 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 16 Jun 2026 14:33:56 +0300
+Subject: [PATCH] (halium) Implement Java module disabling via halium_ignored
+
+Add haliumIgnored() helper to skip dependency errors for ignored modules.
+Silently drop missing dependencies for modules matching halium_ignored_modules.list patterns.
+Allows build to proceed without Java modules while gracefully handling their deps.
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+Change-Id: I8cb8e600d02e8f260e54a8f588d1b126eb1cb564
+---
+ Android.bp        |  1 +
+ context.go        | 31 +++++++++++++++-
+ halium.diff       | 32 ++++++++++++++++
+ halium_ignored.go | 93 +++++++++++++++++++++++++++++++++++++++++++++++
+ module_ctx.go     |  8 +++-
+ 5 files changed, 163 insertions(+), 2 deletions(-)
+ create mode 100644 halium.diff
+ create mode 100644 halium_ignored.go
+
+diff --git a/Android.bp b/Android.bp
+index 74308e0..00d8cb6 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -51,6 +51,7 @@ bootstrap_go_package {
+     srcs: [
+         "context.go",
+         "context_gob_enc.go",
++        "halium_ignored.go",
+         "incremental.go",
+         "incremental_gob_enc.go",
+         "levenshtein.go",
+diff --git a/context.go b/context.go
+index 199171c..37e949b 100644
+--- a/context.go
++++ b/context.go
+@@ -2207,7 +2207,30 @@ func (c *Context) addVariationDependency(module *moduleInfo, mutator *mutatorInf
+ 	}
+ 
+ 	if foundDep == nil {
+-		if c.allowMissingDependencies {
++		// Halium: route allowlisted names through discoveredMissingDependencies
++		// so they are dropped silently (it short-circuits on haliumIgnored).
++		//
++		// Also silently drop deps on modules whose only available variant has
++		// os:"" — that empty OS variation is the signature of a module disabled
++		// by the halium_disable_java pre-arch mutator (arch.go collapses all
++		// disabled modules to a single ""  variant).  We cannot rely on the
++		// module name alone here because the base Java test modules have unique
++		// generated names (e.g. WMShellExplicitFlickerTestsBubbles) that are not
++		// in the static allowlist.
++		haliumPatternsOnce.Do(haliumLoadPatterns)
++		var haliumDisabled bool
++		for _, m := range possibleDeps.modules {
++			if m.variant.variations.variations["os"] == "" {
++				haliumDisabled = true
++				break
++			}
++		}
++		if haliumDisabled {
++			// The dep exists but was collapsed to os:"" by the Halium disable
++			// mutator. Silently drop — don't record a missing dep either.
++			return nil, nil
++		}
++		if c.allowMissingDependencies || haliumIgnored(depName) {
+ 			// Allow missing variants.
+ 			return nil, c.discoveredMissingDependencies(module, depName, newVariant)
+ 		}
+@@ -3887,6 +3910,12 @@ func (c *Context) handleReplacements(replacements []replace) []error {
+ }
+ 
+ func (c *Context) discoveredMissingDependencies(module *moduleInfo, depName string, depVariations variationMap) (errs []error) {
++	// Halium: silently swallow dependencies on allowlisted names so we can
++	// delete entire repos without chasing transitive references. Matched on
++	// the raw depName, before the variant-decorated form below.
++	if haliumIgnored(depName) {
++		return nil
++	}
+ 	if !depVariations.empty() {
+ 		depName = depName + "{" + c.prettyPrintVariant(depVariations) + "}"
+ 	}
+diff --git a/halium.diff b/halium.diff
+new file mode 100644
+index 0000000..ac28026
+--- /dev/null
++++ b/halium.diff
+@@ -0,0 +1,32 @@
++diff --git a/context.go b/context.go
++index 1baefda..2f9782c 100644
++--- a/context.go
+++++ b/context.go
++@@ -3343,7 +3343,7 @@ func (c *Context) generateModuleBuildActions(config interface{},
++ 				return true
++ 			}
++ 
++-			if module.missingDeps != nil && !mctx.handledMissingDeps {
+++			if module.missingDeps != nil && !mctx.handledMissingDeps && !c.allowMissingDependencies {
++ 				var errs []error
++ 				for _, depName := range module.missingDeps {
++ 					errs = append(errs, c.missingDependencyError(module, depName))
++@@ -3656,11 +3656,14 @@ func (c *Context) discoveredMissingDependencies(module *moduleInfo, depName stri
++ 	if !depVariations.empty() {
++ 		depName = depName + "{" + c.prettyPrintVariant(depVariations) + "}"
++ 	}
++-	if c.allowMissingDependencies {
++-		module.missingDeps = append(module.missingDeps, depName)
++-		return nil
+++
+++	// For Halium: silently drop missing dependencies by default to avoid APEX / framework
+++	// blueprint issues when directories are missing.
+++	// Only print if explicitly requested.
+++	if os.Getenv("HALIUM_PRINT_MISSING_DEPENDENCIES") == "true" {
+++        fmt.Printf("Halium Blueprint: Dropping missing dependency %q for module %q\n", depName, module.Name())
++ 	}
++-	return []error{c.missingDependencyError(module, depName)}
+++	return nil
++ }
++ 
++ func (c *Context) missingDependencyError(module *moduleInfo, depName string) (errs error) {
+diff --git a/halium_ignored.go b/halium_ignored.go
+new file mode 100644
+index 0000000..330f0de
+--- /dev/null
++++ b/halium_ignored.go
+@@ -0,0 +1,93 @@
++// Halium: silently swallow dependencies on modules that match a configurable
++// allowlist. This lets us delete entire Java-only repos (or individual
++// Android.bp entries) from the Halium manifest without chasing every
++// transitive reference. Loaded lazily on first use.
++//
++// Sources, in order:
++//  1. A small hardcoded baseline below.
++//  2. Patterns from $TOP/build/soong/halium_ignored_modules.list, one per line,
++//     blank lines and lines starting with '#' ignored. Patterns use
++//     filepath.Match semantics ('*', '?', '[abc]').
++//
++// $TOP is taken from $TOP, then $ANDROID_BUILD_TOP, then the current working
++// directory (Soong is normally invoked from the tree root, so '.' works).
++
++package blueprint
++
++import (
++	"bufio"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++)
++
++var haliumBaselinePatterns = []string{
++	// Intentionally empty; populate halium_ignored_modules.list in the tree.
++}
++
++var (
++	haliumPatternsOnce sync.Once
++	haliumPatterns     []string
++)
++
++func haliumLoadPatterns() {
++	haliumPatterns = append(haliumPatterns, haliumBaselinePatterns...)
++
++	top := os.Getenv("TOP")
++	if top == "" {
++		top = os.Getenv("ANDROID_BUILD_TOP")
++	}
++	if top == "" {
++		// soong_build is invoked via "env -i $BUILDER --top <tree-root> ..."
++		// which clears all environment variables, so fall back to parsing os.Args.
++		for i, arg := range os.Args {
++			if arg == "--top" && i+1 < len(os.Args) {
++				top = os.Args[i+1]
++				break
++			}
++		}
++	}
++	if top == "" {
++		top = "."
++	}
++	path := filepath.Join(top, "build", "soong", "halium_ignored_modules.list")
++
++	f, err := os.Open(path)
++	if err != nil {
++		return
++	}
++	defer f.Close()
++
++	scanner := bufio.NewScanner(f)
++	for scanner.Scan() {
++		line := strings.TrimSpace(scanner.Text())
++		if line == "" || strings.HasPrefix(line, "#") {
++			continue
++		}
++		haliumPatterns = append(haliumPatterns, line)
++	}
++}
++
++// haliumIgnored reports whether depName matches a pattern in the Halium
++// ignore list. Safe for concurrent use.
++func haliumIgnored(depName string) bool {
++	haliumPatternsOnce.Do(haliumLoadPatterns)
++	if len(haliumPatterns) == 0 {
++		return false
++	}
++	// Strip any "{variant}" suffix the caller may have appended for diagnostics.
++	if i := strings.IndexByte(depName, '{'); i >= 0 {
++		depName = depName[:i]
++	}
++	for _, p := range haliumPatterns {
++		if ok, _ := filepath.Match(p, depName); ok {
++			return true
++		}
++		// Allow exact matches without glob syntax.
++		if p == depName {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/module_ctx.go b/module_ctx.go
+index 75a6f84..ff55fa2 100644
+--- a/module_ctx.go
++++ b/module_ctx.go
+@@ -1262,6 +1262,10 @@ func (mctx *mutatorContext) AddReverseVariationDependency(variations []Variation
+ 
+ 	possibleDeps := mctx.context.moduleGroupFromName(name, mctx.module.namespace())
+ 	if possibleDeps == nil {
++		// Halium: silently skip reverse deps that target an allowlisted name.
++		if haliumIgnored(name) {
++			return
++		}
+ 		mctx.errs = append(mctx.errs, &BlueprintError{
+ 			Err: fmt.Errorf("%q has a reverse dependency on undefined module %q",
+ 				mctx.module.Name(), name),
+@@ -1277,7 +1281,9 @@ func (mctx *mutatorContext) AddReverseVariationDependency(variations []Variation
+ 	}
+ 
+ 	if found == nil {
+-		if mctx.context.allowMissingDependencies {
++		// Halium: route allowlisted names through discoveredMissingDependencies
++		// so they are dropped silently.
++		if mctx.context.allowMissingDependencies || haliumIgnored(name) {
+ 			// Allow missing variants.
+ 			mctx.errs = append(mctx.errs, mctx.context.discoveredMissingDependencies(mctx.module, name, newVariant)...)
+ 		} else {

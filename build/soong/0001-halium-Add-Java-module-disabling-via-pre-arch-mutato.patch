@@ -1,0 +1,929 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 16 Jun 2026 14:34:22 +0300
+Subject: [PATCH] (halium) Add Java module disabling via pre-arch mutator
+
+Disable ~55 Java module types before OS/arch variant explosion.
+Modify arch transitions to return empty variant for disabled modules.
+Add halium_ignored_modules.list glob patterns for module filtering.
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+Change-Id: Ic365efd6f8ea957df39789b9d7d9b8e4801a8deb
+---
+ Android.bp                             |   8 +-
+ android/arch.go                        |  20 ++
+ android/gen_notice.go                  |   5 +
+ android/paths.go                       |  13 +
+ ci_tests/Android.bp                    |   1 +
+ ci_tests/halium_noop.go                |  22 ++
+ genrule/genrule.go                     |  10 +
+ halium.diff                            | 353 +++++++++++++++++++++++++
+ halium_ignored_modules.list            | 125 +++++++++
+ java/Android.bp                        |   1 +
+ java/halium_noop.go                    | 144 ++++++++++
+ java/lint.go                           |   5 +
+ test_suites/test_suites.go             |   4 +
+ tradefed_modules/test_module_config.go |  13 +-
+ ui/build/androidmk_denylist.go         |   1 +
+ 15 files changed, 719 insertions(+), 6 deletions(-)
+ create mode 100644 ci_tests/halium_noop.go
+ create mode 100644 halium.diff
+ create mode 100644 halium_ignored_modules.list
+ create mode 100644 java/halium_noop.go
+
+diff --git a/Android.bp b/Android.bp
+index b0106125e..a7378f537 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -189,9 +189,11 @@ build_prop {
+     name: "system-build.prop",
+     stem: "build.prop",
+     product_config: ":product_config",
+-    footer_files: [
+-        ":applied_backported_fixes",
+-    ],
++    // Halium: the applied_backported_fixes footer is produced by a genrule whose tool
++    // (applied_backported_fixes_property_writer) is a java_binary_host. In the minimized
++    // no-Java build that tool is disabled, so its .prop output can never be built and it
++    // blocks the whole system build.prop edge. The backported-fixes property is not needed
++    // for Halium, so drop the footer.
+     dist: {
+         targets: [
+             "droidcore-unbundled",
+diff --git a/android/arch.go b/android/arch.go
+index 318ab4513..005c3decc 100644
+--- a/android/arch.go
++++ b/android/arch.go
+@@ -455,6 +455,18 @@ func (o *osTransitionMutator) Split(ctx BaseModuleContext) []string {
+ 		return []string{""}
+ 	}
+ 
++	// Halium: force-disabled modules (e.g. no-op Java stubs) don't need OS
++	// variants. Pre-populate allOsProvider with a Device/Android entry so that
++	// Mutate() doesn't panic if a parent dependency propagates an "android"
++	// variation onto this module via the transition mechanism.
++	if base.commonProperties.ForcedDisabled {
++		SetProvider(ctx, allOsProvider, &allOsInfo{
++			Os:         map[string]OsType{Android.String(): Android},
++			Variations: []string{Android.String()},
++		})
++		return []string{""}
++	}
++
+ 	moduleOSList := moduleOSList(ctx, base)
+ 
+ 	// If there are no supported OSes then disable the module.
+@@ -614,6 +626,14 @@ func (a *archTransitionMutator) Split(ctx BaseModuleContext) []string {
+ 		return []string{""}
+ 	}
+ 
++	// Halium: force-disabled modules don't need arch variants. Check
++	// ForcedDisabled directly — calling Enabled(ctx) here would try to
++	// evaluate select { os/arch: ... } expressions before the OS/arch
++	// transition has been applied to all modules, causing a panic.
++	if base.commonProperties.ForcedDisabled {
++		return []string{""}
++	}
++
+ 	os := base.commonProperties.CompileOS
+ 	if os == CommonOS {
+ 		// Do not create arch specific variants for the CommonOS variant.
+diff --git a/android/gen_notice.go b/android/gen_notice.go
+index 1e693d2d6..7e5ae6938 100644
+--- a/android/gen_notice.go
++++ b/android/gen_notice.go
+@@ -69,6 +69,11 @@ func (s *genNoticeBuildRules) GenerateBuildActions(ctx SingletonContext) {
+ 		if ctx.Failed() {
+ 			return
+ 		}
++		// Halium: all referenced modules may be disabled (e.g. Java no-op).
++		// Skip notice generation rather than panicking on an empty module list.
++		if len(modules) == 0 {
++			return
++		}
+ 		out(ctx, gm.Output, ctx.ModuleName(m),
+ 			proptools.StringDefault(gm.ArtifactName, defaultName),
+ 			BuildNoticeFromLicenseDataArgs{
+diff --git a/android/paths.go b/android/paths.go
+index cbd2ab435..68b92e42e 100644
+--- a/android/paths.go
++++ b/android/paths.go
+@@ -687,9 +687,22 @@ func (p OutputPaths) Strings() []string {
+ func getPathsFromModuleDep(ctx ModuleWithDepsPathContext, path, moduleName, tag string) (Paths, error) {
+ 	module := GetModuleProxyFromPathDep(ctx, moduleName, tag)
+ 	if module.IsNil() {
++		// Halium: when a dep was silently dropped (disabled Java no-op or absent
++		// from manifest) the dep edge does not exist. Under AllowMissingDependencies
++		// return empty paths so the source list is pruned rather than emitting a
++		// Ninja error rule.
++		if ctx.Config().AllowMissingDependencies() {
++			return nil, nil
++		}
+ 		return nil, missingDependencyError{[]string{moduleName}}
+ 	}
+ 	if !OtherModulePointerProviderOrDefault(ctx, module, CommonModuleInfoProvider).Enabled {
++		// Halium: dep module exists in graph but is disabled (e.g. Java no-op).
++		// Under AllowMissingDependencies silently return empty rather than emitting
++		// a Ninja error rule for the missing output files.
++		if ctx.Config().AllowMissingDependencies() {
++			return nil, nil
++		}
+ 		return nil, missingDependencyError{[]string{moduleName}}
+ 	}
+ 
+diff --git a/ci_tests/Android.bp b/ci_tests/Android.bp
+index d975229ab..6cac4af57 100644
+--- a/ci_tests/Android.bp
++++ b/ci_tests/Android.bp
+@@ -15,6 +15,7 @@ bootstrap_go_package {
+     ],
+     srcs: [
+         "ci_test_package_zip.go",
++        "halium_noop.go",
+     ],
+     testSrcs: [
+     ],
+diff --git a/ci_tests/halium_noop.go b/ci_tests/halium_noop.go
+new file mode 100644
+index 000000000..e4b0fd28b
+--- /dev/null
++++ b/ci_tests/halium_noop.go
+@@ -0,0 +1,22 @@
++// Halium: disable test_package (CI test-zip) modules. Halium does not need
++// CI test packaging, and the tests listed in these modules come from Java app
++// packages that are not in the Halium manifest, which would cause dependency
++// resolution errors if DepsMutator were allowed to run.
++
++package ci_tests
++
++import (
++	"android/soong/android"
++)
++
++func init() {
++	android.PreArchMutators(func(ctx android.RegisterMutatorsContext) {
++		ctx.BottomUp("halium_disable_ci_tests", haliumDisableCITestsMutator)
++	})
++}
++
++func haliumDisableCITestsMutator(ctx android.BottomUpMutatorContext) {
++	if _, ok := ctx.Module().(*testPackageZip); ok {
++		ctx.Module().Disable()
++	}
++}
+diff --git a/genrule/genrule.go b/genrule/genrule.go
+index d7d40ab7c..d7aa29866 100644
+--- a/genrule/genrule.go
++++ b/genrule/genrule.go
+@@ -634,6 +634,12 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
+ 					if loc, ok := locationLabels[label]; ok {
+ 						paths := loc.Paths(cmd)
+ 						if len(paths) == 0 {
++							// Halium: when Java modules are disabled their outputs
++							// are absent; tolerate empty labels under
++							// AllowMissingDependencies so analysis continues.
++							if ctx.Config().AllowMissingDependencies() {
++								return "", nil
++							}
+ 							return reportError("label %q has no files", label)
+ 						} else if len(paths) > 1 {
+ 							return reportError("label %q has multiple files, use $(locations %s) to reference it",
+@@ -648,6 +654,10 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
+ 					if loc, ok := locationLabels[label]; ok {
+ 						paths := loc.Paths(cmd)
+ 						if len(paths) == 0 {
++							// Halium: same empty-label tolerance as above.
++							if ctx.Config().AllowMissingDependencies() {
++								return "", nil
++							}
+ 							return reportError("label %q has no files", label)
+ 						}
+ 						return strings.Join(proptools.ShellEscapeList(paths), " "), nil
+diff --git a/halium.diff b/halium.diff
+new file mode 100644
+index 000000000..7a014c54d
+--- /dev/null
++++ b/halium.diff
+@@ -0,0 +1,353 @@
++diff --git a/aconfig/codegen/cc_aconfig_library.go b/aconfig/codegen/cc_aconfig_library.go
++index ce3745665..74c68db3e 100644
++--- a/aconfig/codegen/cc_aconfig_library.go
+++++ b/aconfig/codegen/cc_aconfig_library.go
++@@ -99,6 +99,17 @@ func (this *CcAconfigLibraryCallbacks) GeneratorSources(ctx cc.ModuleContext) cc
++ 	// Get the values that came from the global RELEASE_ACONFIG_VALUE_SETS flag
++ 	declarationsModules := ctx.GetDirectDepsProxyWithTag(ccDeclarationsTag)
++ 	if len(declarationsModules) != 1 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			this.generatedDir = android.PathForModuleGen(ctx)
+++			this.headerDir = android.PathForModuleGen(ctx, "include")
+++			result.IncludeDirs = []android.Path{this.headerDir}
+++			result.ReexportedDirs = []android.Path{this.headerDir}
+++			this.generatedCpp = android.PathForModuleGen(ctx, "aconfig_missing.cc")
+++			result.Sources = []android.Path{this.generatedCpp}
+++			this.generatedH = android.PathForModuleGen(ctx, "include", "aconfig_missing.h")
+++			result.Headers = []android.Path{this.generatedH}
+++			return result
+++		}
++ 		panic(fmt.Errorf("Exactly one aconfig_declarations property required"))
++ 	}
++ 	declarations, _ := android.OtherModuleProvider(ctx, declarationsModules[0], android.AconfigDeclarationsProviderKey)
++@@ -129,6 +140,9 @@ func (this *CcAconfigLibraryCallbacks) GeneratorBuildActions(ctx cc.ModuleContex
++ 	// Get the values that came from the global RELEASE_ACONFIG_VALUE_SETS flag
++ 	declarationsModules := ctx.GetDirectDepsProxyWithTag(ccDeclarationsTag)
++ 	if len(declarationsModules) != 1 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			return
+++		}
++ 		panic(fmt.Errorf("Exactly one aconfig_declarations property required"))
++ 	}
++ 	declarations, _ := android.OtherModuleProvider(ctx, declarationsModules[0], android.AconfigDeclarationsProviderKey)
++diff --git a/aconfig/codegen/java_aconfig_library.go b/aconfig/codegen/java_aconfig_library.go
++index 7b9da8eb4..67d19a310 100644
++--- a/aconfig/codegen/java_aconfig_library.go
+++++ b/aconfig/codegen/java_aconfig_library.go
++@@ -80,6 +80,11 @@ func (callbacks *JavaAconfigDeclarationsLibraryCallbacks) GenerateSourceJarBuild
++ 	// Get the values that came from the global RELEASE_ACONFIG_VALUE_SETS flag
++ 	declarationsModules := ctx.GetDirectDepsWithTag(declarationsTag)
++ 	if len(declarationsModules) != 1 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			srcJarPath := android.PathForModuleGen(ctx, ctx.ModuleName()+".srcjar")
+++			missingPath := android.PathForModuleGen(ctx, "aconfig_missing.pb")
+++			return srcJarPath, missingPath
+++		}
++ 		panic("Exactly one aconfig_declarations property required")
++ 	}
++ 	declarations, _ := android.OtherModuleProvider(ctx, declarationsModules[0], android.AconfigDeclarationsProviderKey)
++diff --git a/aconfig/codegen/rust_aconfig_library.go b/aconfig/codegen/rust_aconfig_library.go
++index 53818c250..637cf3e96 100644
++--- a/aconfig/codegen/rust_aconfig_library.go
+++++ b/aconfig/codegen/rust_aconfig_library.go
++@@ -63,6 +63,10 @@ func (a *aconfigDecorator) GenerateSource(ctx rust.ModuleContext, deps rust.Path
++ 	declarationsModules := ctx.GetDirectDepsWithTag(rustDeclarationsTag)
++ 
++ 	if len(declarationsModules) != 1 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			a.BaseSourceProvider.OutputFiles = android.Paths{generatedSource}
+++			return generatedSource
+++		}
++ 		panic(fmt.Errorf("Exactly one aconfig_declarations property required"))
++ 	}
++ 	declarations, _ := android.OtherModuleProvider(ctx, declarationsModules[0], android.AconfigDeclarationsProviderKey)
++diff --git a/android/all_teams.go b/android/all_teams.go
++index 18a050f5d..c70f2e237 100644
++--- a/android/all_teams.go
+++++ b/android/all_teams.go
++@@ -158,7 +158,7 @@ func (t *allTeamsSingleton) lookupTeamForAllModules() *team_proto.AllTeams {
++ 		}
++ 
++ 		trendy_team_id := ""
++-		if found {
+++		if found && teamProperties.Trendy_team_id != nil {
++ 			trendy_team_id = *teamProperties.Trendy_team_id
++ 		}
++ 
++diff --git a/android/apex.go b/android/apex.go
++index 57baff5cf..6b2e6a5b4 100644
++--- a/android/apex.go
+++++ b/android/apex.go
++@@ -713,6 +713,11 @@ func CheckMinSdkVersion(ctx ModuleContext, minSdkVersion ApiLevel, walk WalkPayl
++ 		return
++ 	}
++ 
+++	// For Halium: skip min_sdk_version enforcement when ignoring missing dependencies
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		return
+++	}
+++
++ 	// do not enforce for coverage build
++ 	if ctx.Config().IsEnvTrue("EMMA_INSTRUMENT") || ctx.DeviceConfig().NativeCoverageEnabled() || ctx.DeviceConfig().ClangCoverageEnabled() {
++ 		return
++diff --git a/android/singleton.go b/android/singleton.go
++index e5f26842a..d3e8261a7 100644
++--- a/android/singleton.go
+++++ b/android/singleton.go
++@@ -361,6 +361,10 @@ func (s *singletonContextAdaptor) ModuleVariantsFromName(referer ModuleProxy, na
++ 		if depQualified.pkg != qualified.name.pkg {
++ 			rule := effectiveVisibilityRules(s.Config(), depQualified)
++ 			if !rule.matches(qualified) {
+++				if s.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++					result = append(result, ModuleProxy{module})
+++					continue
+++				}
++ 				s.ModuleErrorf(referer, "module %q references %q which is not visible to this module\nYou may need to add %q to its visibility",
++ 					referer.Name(), depQualified, "//"+s.ModuleDir(referer))
++ 				continue
++diff --git a/android/visibility.go b/android/visibility.go
++index 915368710..901b3db18 100644
++--- a/android/visibility.go
+++++ b/android/visibility.go
++@@ -551,6 +551,9 @@ func visibilityRuleEnforcer(ctx BottomUpMutatorContext) {
++ 
++ 		rule := effectiveVisibilityRules(ctx.Config(), depQualified)
++ 		if !rule.matches(qualified) {
+++			if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++				return
+++			}
++ 			ctx.ModuleErrorf("depends on %s which is not visible to this module\nYou may need to add %q to its visibility", depQualified, "//"+ctx.ModuleDir())
++ 		}
++ 	})
++diff --git a/apex/apex.go b/apex/apex.go
++index a726098c6..e9c5679d5 100644
++--- a/apex/apex.go
+++++ b/apex/apex.go
++@@ -1750,9 +1750,14 @@ func (vctx *visitorContext) normalizeFileInfo(mctx android.ModuleContext) {
++ 			encountered[dest] = f
++ 		} else {
++ 			if vctx.checkDuplicate && f.builtFile.String() != e.builtFile.String() {
++-				mctx.ModuleErrorf("apex file %v is provided by two different files %v and %v",
++-					dest, e.builtFile, f.builtFile)
++-				return
+++				if mctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++					// For Halium: just take the first one and ignore duplicates when dependencies are dropped.
+++					vctx.duplicateTransitiveFilesInfo = append(vctx.duplicateTransitiveFilesInfo, f)
+++				} else {
+++					mctx.ModuleErrorf("apex file %v is provided by two different files %v and %v",
+++						dest, e.builtFile, f.builtFile)
+++					return
+++				}
++ 			} else {
++ 				vctx.duplicateTransitiveFilesInfo = append(vctx.duplicateTransitiveFilesInfo, f)
++ 			}
++@@ -2564,6 +2569,9 @@ func (a *apexBundle) checkStaticLinkingToStubLibraries(ctx android.ModuleContext
++ 
++ // checkUpdatable enforces APEX and its transitive dep properties to have desired values for updatable APEXes.
++ func (a *apexBundle) checkUpdatable(ctx android.ModuleContext) {
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		return
+++	}
++ 	if a.Updatable() {
++ 		if a.minSdkVersionValue(ctx) == "" {
++ 			ctx.PropertyErrorf("updatable", "updatable APEXes should set min_sdk_version as well")
++@@ -2611,6 +2619,11 @@ func (a *apexBundle) checkJavaStableSdkVersion(ctx android.ModuleContext) {
++ 
++ // checkApexAvailability ensures that the all the dependencies are marked as available for this APEX.
++ func (a *apexBundle) checkApexAvailability(ctx android.ModuleContext) {
+++	// For Halium: skip apex availability checks when ignoring missing dependencies
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		return
+++	}
+++
++ 	// Let's be practical. Availability for test, host, and the VNDK apex isn't important
++ 	if a.testApex || a.vndkApex {
++ 		return
++diff --git a/apex/builder.go b/apex/builder.go
++index 23c2ed8aa..90fcd4746 100644
++--- a/apex/builder.go
+++++ b/apex/builder.go
++@@ -50,7 +50,7 @@ func init() {
++ 	// projects, and hence cannot build 'aapt2'. Use the SDK prebuilt instead.
++ 	hostBinToolVariableWithPrebuilt := func(name, prebuiltDir, tool string) {
++ 		pctx.VariableFunc(name, func(ctx android.PackageVarContext) string {
++-			if !ctx.Config().FrameworksBaseDirExists(ctx) {
+++			if !ctx.Config().FrameworksBaseDirExists(ctx) || ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
++ 				return filepath.Join(prebuiltDir, runtime.GOOS, "bin", tool)
++ 			} else {
++ 				return ctx.Config().HostToolPath(ctx, tool).String()
++diff --git a/java/app_builder.go b/java/app_builder.go
++index 943ce317b..f3aaa398b 100644
++--- a/java/app_builder.go
+++++ b/java/app_builder.go
++@@ -284,6 +284,9 @@ func TransformJniLibsToJar(
++ }
++ 
++ func (a *AndroidApp) generateJavaUsedByApex(ctx android.ModuleContext) {
+++	if a.Library.Module.outputFile == nil {
+++		return
+++	}
++ 	javaApiUsedByOutputFile := android.PathForModuleOut(ctx, a.installApkName+"_using.xml")
++ 	javaUsedByRule := android.NewRuleBuilder(pctx, ctx)
++ 	javaUsedByRule.Command().
++diff --git a/java/base.go b/java/base.go
++index 8aa0109d0..77efdabd6 100644
++--- a/java/base.go
+++++ b/java/base.go
++@@ -2380,6 +2380,9 @@ func (j *Module) checkSdkLinkType(
++ 	if ctx.Host() {
++ 		return
++ 	}
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		return
+++	}
++ 
++ 	myLinkType, stubs := j.getSdkLinkType(ctx, ctx.ModuleName())
++ 	if stubs {
++diff --git a/java/classpath_fragment.go b/java/classpath_fragment.go
++index 88a8fb80a..1af243b35 100644
++--- a/java/classpath_fragment.go
+++++ b/java/classpath_fragment.go
++@@ -164,6 +164,9 @@ func (c *ClasspathFragmentBase) outputFilename() string {
++ 
++ func (c *ClasspathFragmentBase) generateClasspathProtoBuildActions(ctx android.ModuleContext, configuredJars android.ConfiguredJarList, jars []classpathJar) {
++ 	generateProto := proptools.BoolDefault(c.properties.Generate_classpaths_proto, true)
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		generateProto = false
+++	}
++ 	if generateProto {
++ 		outputFilename := c.outputFilename()
++ 		c.outputFilepath = android.PathForModuleOut(ctx, outputFilename).OutputPath
++diff --git a/java/config/config.go b/java/config/config.go
++index fdb8d7886..854132779 100644
++--- a/java/config/config.go
+++++ b/java/config/config.go
++@@ -229,7 +229,7 @@ func init() {
++ 
++ func hostBinToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 	pctx.VariableFunc(name, func(ctx android.PackageVarContext) string {
++-		if ctx.Config().AlwaysUsePrebuiltSdks() {
+++		if ctx.Config().AlwaysUsePrebuiltSdks() || ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
++ 			return filepath.Join("prebuilts/sdk/tools", runtime.GOOS, "bin", tool)
++ 		} else {
++ 			return ctx.Config().HostToolPath(ctx, tool).String()
++@@ -239,7 +239,7 @@ func hostBinToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 
++ func hostJavaToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 	pctx.VariableFunc(name, func(ctx android.PackageVarContext) string {
++-		if ctx.Config().AlwaysUsePrebuiltSdks() {
+++		if ctx.Config().AlwaysUsePrebuiltSdks() || ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
++ 			return filepath.Join("prebuilts/sdk/tools/lib", tool+".jar")
++ 		} else {
++ 			return ctx.Config().HostJavaToolPath(ctx, tool+".jar").String()
++@@ -249,7 +249,7 @@ func hostJavaToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 
++ func hostJNIToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 	pctx.VariableFunc(name, func(ctx android.PackageVarContext) string {
++-		if ctx.Config().AlwaysUsePrebuiltSdks() {
+++		if ctx.Config().AlwaysUsePrebuiltSdks() || ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
++ 			ext := ".so"
++ 			if runtime.GOOS == "darwin" {
++ 				ext = ".dylib"
++@@ -263,7 +263,7 @@ func hostJNIToolVariableWithSdkToolsPrebuilt(name, tool string) {
++ 
++ func hostBinToolVariableWithBuildToolsPrebuilt(name, tool string) {
++ 	pctx.VariableFunc(name, func(ctx android.PackageVarContext) string {
++-		if ctx.Config().AlwaysUsePrebuiltSdks() {
+++		if ctx.Config().AlwaysUsePrebuiltSdks() || ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
++ 			return filepath.Join("prebuilts/build-tools", ctx.Config().PrebuiltOS(), "bin", tool)
++ 		} else {
++ 			return ctx.Config().HostToolPath(ctx, tool).String()
++diff --git a/java/ravenwood.go b/java/ravenwood.go
++index a942dc653..74c3c5bbe 100644
++--- a/java/ravenwood.go
+++++ b/java/ravenwood.go
++@@ -187,7 +187,14 @@ func (r *ravenwoodTest) GenerateAndroidBuildActions(ctx android.ModuleContext) {
++ 	// All JNI libraries included in the runtime
++ 	var runtimeJniModuleNames map[string]bool
++ 
++-	utils := ctx.GetDirectDepsProxyWithTag(ravenwoodUtilsTag)[0]
+++	utilsDeps := ctx.GetDirectDepsProxyWithTag(ravenwoodUtilsTag)
+++	if len(utilsDeps) == 0 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			return
+++		}
+++		panic("missing ravenwood utils dependency")
+++	}
+++	utils := utilsDeps[0]
++ 	for _, installFile := range android.OtherModuleProviderOrDefault(
++ 		ctx, utils, android.InstallFilesProvider).InstallFiles {
++ 		installDeps = append(installDeps, installFile)
++@@ -197,7 +204,14 @@ func (r *ravenwoodTest) GenerateAndroidBuildActions(ctx android.ModuleContext) {
++ 		runtimeJniModuleNames = jniDeps.names
++ 	}
++ 
++-	runtime := ctx.GetDirectDepsProxyWithTag(ravenwoodRuntimeTag)[0]
+++	runtimeDeps := ctx.GetDirectDepsProxyWithTag(ravenwoodRuntimeTag)
+++	if len(runtimeDeps) == 0 {
+++		if ctx.Config().AllowMissingDependencies() {
+++			return
+++		}
+++		panic("missing ravenwood runtime dependency")
+++	}
+++	runtime := runtimeDeps[0]
++ 	for _, installFile := range android.OtherModuleProviderOrDefault(
++ 		ctx, runtime, android.InstallFilesProvider).InstallFiles {
++ 		installDeps = append(installDeps, installFile)
++diff --git a/java/sdk.go b/java/sdk.go
++index d676164e9..013ce7da6 100644
++--- a/java/sdk.go
+++++ b/java/sdk.go
++@@ -157,6 +157,15 @@ func decodeSdkDep(ctx android.EarlyModuleContext, sdkContext android.SdkContext)
++ 	}
++ 
++ 	toModule := func(module string, aidl android.Path) sdkDep {
+++		// For Halium: if we are ignoring missing dependencies, don't generate the stub
+++		// dependencies that cause dependency cycles when the underlying framework modules are missing.
+++		if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++			return sdkDep{
+++				useModule:      true,
+++				noStandardLibs: true,
+++			}
+++		}
+++
++ 		// Select the kind of system modules needed for the sdk version.
++ 		systemModulesKind := systemModuleKind(sdkVersion.Kind, android.FutureApiLevel)
++ 		systemModules := fmt.Sprintf("core-%s-stubs-system-modules", systemModulesKind)
++@@ -184,6 +193,11 @@ func decodeSdkDep(ctx android.EarlyModuleContext, sdkContext android.SdkContext)
++ 	case android.SdkNone:
++ 		systemModules := sdkContext.SystemModules()
++ 		if systemModules == "" {
+++			if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++				return sdkDep{
+++					noStandardLibs: true,
+++				}
+++			}
++ 			ctx.PropertyErrorf("sdk_version",
++ 				`system_modules is required to be set to a non-empty value when sdk_version is "none", did you mean sdk_version: "core_platform"?`)
++ 		} else if systemModules == "none" {
++@@ -236,6 +250,12 @@ func (sdkSingleton) GenerateBuildActions(ctx android.SingletonContext) {
++ 		return
++ 	}
++ 
+++	// For Halium: skip generating Java framework SDK stubs/docs when we are
+++	// explicitly ignoring missing dependencies to build native-only.
+++	if ctx.Config().IsEnvTrue("HALIUM_IGNORE_MISSING_DEPENDENCIES") {
+++		return
+++	}
+++
++ 	createSdkFrameworkAidl(ctx)
++ 	createNonUpdatableFrameworkAidl(ctx)
++ 	createAPIFingerprint(ctx)
++diff --git a/ui/build/androidmk_denylist.go b/ui/build/androidmk_denylist.go
++index cf97f1c2f..7673d6fef 100644
++--- a/ui/build/androidmk_denylist.go
+++++ b/ui/build/androidmk_denylist.go
++@@ -63,6 +63,7 @@ var androidmk_allowlist []string = []string{
++ 	"art/Android.mk",
++ 	"bootable/deprecated-ota/updater/Android.mk",
++ 	"external/mesa/android/Android.mk",
+++	"external/libarchive/contrib/android/Android.mk",
++ 	"tools/vendor/google_prebuilts/arc/Android.mk",
++ }
++ 
+diff --git a/halium_ignored_modules.list b/halium_ignored_modules.list
+new file mode 100644
+index 000000000..9ed1719ce
+--- /dev/null
++++ b/halium_ignored_modules.list
+@@ -0,0 +1,125 @@
++# Halium ignored modules list.
++#
++# One pattern per line. Blank lines and lines starting with '#' are ignored.
++# Patterns use filepath.Match semantics: '*' matches any run of non-/, '?'
++# matches one char, '[abc]' matches a character class. No '/' is involved
++# here so '*' effectively matches anything within a name.
++#
++# A name that matches any pattern is silently dropped from dependency
++# resolution: references to it produce no error, and dependents see no
++# corresponding child in their dep graph. Use this to delete entire Java
++# repos / Android.bp entries from the Halium manifest without chasing
++# every transitive reference.
++#
++# Start conservative; expand as build failures reveal more names you want
++# silenced. Patterns are scanned in order; first match wins (semantically
++# the same as any match — order has no effect on correctness).
++
++# --- Java core libraries ---
++core-oj
++core-libart
++core-icu4j
++core-icu4j-for-host
++core-all
++core-all-system-modules
++core-lambda-stubs
++core-public-stubs-system-modules
++core-module-lib-stubs-system-modules
++core-system-modules-lint
++core-*-stubs-system-modules
++
++# --- Framework jars and bootclasspath ---
++framework
++framework-*
++framework.*
++*.framework
++ext
++*.ext
++services
++services.*
++android_*_stubs_current
++android_*_stubs_current_exportable
++android_*_stubs_current.from-text
++android.test.*
++android_test_*
++android_system_*
++
++# --- Bootclasspath / systemserverclasspath fragments ---
++*-bootclasspath-fragment
++*.bootclasspath-fragment
++*-systemserverclasspath-fragment
++*.systemserverclasspath-fragment
++platform-bootclasspath
++platform-systemserverclasspath
++
++# --- API surfaces / stubs / lint ---
++*-stubs
++*-stubs.*
++*.stubs
++*.stubs.*
++*-api
++*-api.*
++api-stubs-*
++*-api-stubs-*
++*.api
++metalava
++metalava-*
++
++# --- Kotlin / Java toolchains commonly pulled in ---
++kotlin-*
++kotlinx-*
++kotlin_*
++kotlinx_*
++
++# --- ART / dexpreopt artifacts ---
++art
++art.*
++art-*
++*.art
++dex2oat*
++profman*
++oatdump*
++
++# --- Crypto / TLS Java libs ---
++conscrypt
++conscrypt.*
++conscrypt-*
++bouncycastle
++bouncycastle.*
++bouncycastle-*
++
++# --- AndroidX / Jetpack ---
++androidx.*
++androidx-*
++
++# --- Java aconfig modules (from packages not in Halium manifest) ---
++# These are generated java_aconfig_library targets; their names are package-
++# qualified (e.g. com.android.eyedropper.flags-aconfig-java) and cannot be
++# covered by the haliumDisabled variant check because the source package is
++# absent entirely.
++*-aconfig-java
++*-aconfig-java.*
++*_aconfig_java
++*_aconfig_java_*
++
++# --- Java/app defaults modules (from packages not in Halium manifest) ---
++# These are android_defaults / java_defaults that live in un-checked-out repos.
++# The modules that reference them are Java apps (also disabled), so silencing
++# the missing-dep error is safe.
++*_defaults
++*-defaults
++
++# --- Misc Java-only ---
++okhttp
++okhttp-*
++ext-*
++icu4j-*
++robolectric*
++tradefed*
++junit*
++hamcrest*
++mockito*
++truth*
++google-*
++*.test
++*.tests
+diff --git a/java/Android.bp b/java/Android.bp
+index cf1be3a89..9a275d6a9 100644
+--- a/java/Android.bp
++++ b/java/Android.bp
+@@ -59,6 +59,7 @@ bootstrap_go_package {
+         "generated_java_library.go",
+         "genrule.go",
+         "genrule_combiner.go",
++        "halium_noop.go",
+         "hiddenapi.go",
+         "hiddenapi_modular.go",
+         "hiddenapi_monolithic.go",
+diff --git a/java/halium_noop.go b/java/halium_noop.go
+new file mode 100644
+index 000000000..15d962428
+--- /dev/null
++++ b/java/halium_noop.go
+@@ -0,0 +1,144 @@
++// Halium: disable all Java module types so they produce no build actions and
++// no dependency edges. This eliminates the arch/OS variant explosion and the
++// transitive Java dep graph, reducing Soong's initial-scan RAM significantly.
++//
++// Two mechanisms work together:
++//  1. This pre-arch mutator calls Disable() on every Java module before the
++//     OS and arch transition mutators run. The arch.go Split() functions
++//     (patched separately) short-circuit to a single variant for disabled
++//     modules, preventing the variant explosion.
++//  2. android/mutator.go's depsMutator already guards behind m.Enabled(), so
++//     DepsMutator() is never called on disabled modules.
++//  3. android/module.go's GenerateBuildActions already guards behind
++//     m.Enabled(), so GenerateAndroidBuildActions() is never called either.
++//
++// APEXes and other consumers that list Java modules in their java_libs /
++// bootclasspath_fragments / etc. properties will have those dependencies
++// silently dropped by the blueprint allowlist patch in
++// build/blueprint/halium_ignored.go (combined with an entry in
++// build/soong/halium_ignored_modules.list).
++
++package java
++
++import (
++	"android/soong/android"
++)
++
++func init() {
++	android.PreArchMutators(func(ctx android.RegisterMutatorsContext) {
++		ctx.BottomUp("halium_disable_java", haliumDisableJavaMutator)
++	})
++}
++
++func haliumDisableJavaMutator(ctx android.BottomUpMutatorContext) {
++	switch ctx.Module().(type) {
++	// java.go
++	case *Library,
++		*Test,
++		*TestHost,
++		*TestHelperLibrary,
++		*JavaTestImport,
++		*Import,
++		*DexImport,
++		*ApiLibrary,
++		*JavaApiContribution,
++		*JavaApiContributionImport,
++		*Binary,
++		*GenruleCombiner,
++		*GeneratedJavaLibraryModule:
++
++	// app.go
++	case *AndroidApp,
++		*AndroidTest,
++		*AndroidTestHelperApp,
++		*OverrideAndroidApp,
++		*OverrideAndroidTest:
++
++	// aar.go
++	case *AndroidLibrary,
++		*AARImport:
++
++	// app_import.go
++	case *AndroidAppImport,
++		*AndroidTestImport:
++
++	// app_set.go
++	case *AndroidAppSet:
++
++	// bootclasspath_fragment.go
++	case *BootclasspathFragmentModule,
++		*PrebuiltBootclasspathFragmentModule:
++
++	// dexpreopt_bootjars.go
++	case *artBootImages,
++		*dexpreoptBootJars:
++
++	// dexpreopt_check.go
++	case *dexpreoptSystemserverCheck:
++
++	// device_host_converter.go
++	case *DeviceForHost,
++		*HostForDevice:
++
++	// droiddoc.go
++	case *Javadoc,
++		*Droiddoc,
++		*ExportedDroiddocDir:
++
++	// droidstubs.go
++	case *Droidstubs,
++		*PrebuiltStubsSources:
++
++	// fuzz.go
++	case *JavaFuzzTest:
++
++	// platform_bootclasspath.go
++	case *platformBootclasspathModule:
++
++	// platform_compat_config.go
++	case *platformCompatConfig,
++		*prebuiltCompatConfigModule,
++		*globalCompatConfig:
++
++	// plugin.go
++	case *Plugin,
++		*KotlinPlugin:
++
++	// prebuilt_apis.go
++	case *prebuiltApis:
++
++	// ravenwood.go
++	case *ravenwoodTest,
++		*ravenwoodLibgroup:
++
++	// robolectric.go
++	case *robolectricTest,
++		*robolectricRuntimes:
++
++	// rro.go
++	case *RuntimeResourceOverlay,
++		*OverrideRuntimeResourceOverlay,
++		*AutogenRuntimeResourceOverlay:
++
++	// sdk_library.go
++	case *SdkLibrary,
++		*SdkLibraryImport:
++
++	// sdk_library_internal.go
++	case *sdkLibraryXml:
++
++	// system_modules.go
++	case *SystemModules,
++		*systemModulesImport:
++
++	// systemserver_classpath_fragment.go
++	case *platformSystemServerClasspathModule,
++		*SystemServerClasspathModule,
++		*prebuiltSystemServerClasspathModule:
++
++	default:
++		return
++	}
++
++	ctx.Module().Disable()
++}
+diff --git a/java/lint.go b/java/lint.go
+index e06ad0fe3..6e0141608 100644
+--- a/java/lint.go
++++ b/java/lint.go
+@@ -623,6 +623,11 @@ func findModuleOrErr(ctx android.SingletonContext, moduleName string) *android.M
+ 	var res *android.ModuleProxy
+ 	ctx.VisitAllModuleProxies(func(m android.ModuleProxy) {
+ 		if ctx.ModuleName(m) == moduleName {
++			// Halium: skip disabled variants (e.g. Java no-op); they have no
++			// output files and would cause OutputFileForModule to panic.
++			if !android.OtherModulePointerProviderOrDefault(ctx, m, android.CommonModuleInfoProvider).Enabled {
++				return
++			}
+ 			if res == nil {
+ 				res = &m
+ 			} else {
+diff --git a/test_suites/test_suites.go b/test_suites/test_suites.go
+index 9b7961ee0..5dc8a6b10 100644
+--- a/test_suites/test_suites.go
++++ b/test_suites/test_suites.go
+@@ -1175,6 +1175,10 @@ func (m *compatibilityTestSuitePackage) GenerateAndroidBuildActions(ctx android.
+ 
+ 	tradefedName := proptools.String(m.properties.Tradefed)
+ 	tradefed := ctx.GetDirectDepProxyWithTag(tradefedName, ctspTradefedDeptag)
++	// Halium: tradefed is a Java host tool; if disabled (no-op Java), skip.
++	if tradefed.IsNil() {
++		return
++	}
+ 
+ 	tradefedFiles := android.OtherModuleProviderOrDefault(ctx, tradefed, android.InstallFilesProvider).InstallFiles
+ 
+diff --git a/tradefed_modules/test_module_config.go b/tradefed_modules/test_module_config.go
+index c9ef551d6..875e6367a 100644
+--- a/tradefed_modules/test_module_config.go
++++ b/tradefed_modules/test_module_config.go
+@@ -253,6 +253,11 @@ func (m *testModuleConfigModule) javaExtraEntries(entries *android.AndroidMkEntr
+ }
+ 
+ func (m *testModuleConfigModule) AndroidMkEntries() []android.AndroidMkEntries {
++	// Halium: if the base module is disabled (Java no-op), the provider is
++	// never populated. Return no entries to avoid an empty-src prebuilt error.
++	if m.provider.TestConfig == nil {
++		return nil
++	}
+ 	appClass := m.provider.MkAppClass
+ 	include := m.provider.MkInclude
+ 	return []android.AndroidMkEntries{{
+@@ -371,11 +376,13 @@ func (m *testModuleConfigModule) generateManifestAndConfig(ctx android.ModuleCon
+ 		TopLevelTarget: true,
+ 	})
+ 
+-	if !m.validateTestSuites(ctx) {
++	// Halium: if the base module is disabled (e.g. Java no-op), its provider is
++	// never populated. Skip all validation and actions silently; there's nothing
++	// to wrap.
++	if m.provider.TestConfig == nil {
+ 		return
+ 	}
+-	// Ensure the base provider is accurate
+-	if m.provider.TestConfig == nil {
++	if !m.validateTestSuites(ctx) {
+ 		return
+ 	}
+ 	// 1) A manifest file listing the base, write text to a tiny file.
+diff --git a/ui/build/androidmk_denylist.go b/ui/build/androidmk_denylist.go
+index ea4c65c9d..eb6478809 100644
+--- a/ui/build/androidmk_denylist.go
++++ b/ui/build/androidmk_denylist.go
+@@ -61,6 +61,7 @@ var androidmk_denylist []string = []string{
+ 
+ var androidmk_allowlist []string = []string{
+ 	"bootable/deprecated-ota/updater/Android.mk",
++	"external/libarchive/contrib/android/Android.mk",
+ 	"external/mesa/android/Android.mk",
+ }
+ 
