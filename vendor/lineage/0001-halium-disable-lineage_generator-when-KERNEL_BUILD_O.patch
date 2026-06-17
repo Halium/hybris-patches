@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 16 Jun 2026 14:56:13 +0300
+Subject: [PATCH] (halium) disable lineage_generator when
+ KERNEL_BUILD_OUT_PREFIX is absent
+
+Halium uses prebuilt kernels and doesn't run LineageOS kernel header
+generation. Disable lineage_generator modules when the required soong
+config variable is not set.
+
+Change-Id: I7e51100c9a0452b686c81f1fa3d6a73a0155ed20
+---
+ build/soong/Android.bp               |  1 +
+ build/soong/generator/halium_noop.go | 26 ++++++++++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+ create mode 100644 build/soong/generator/halium_noop.go
+
+diff --git a/build/soong/Android.bp b/build/soong/Android.bp
+index 295a6af8..08e9fe46 100644
+--- a/build/soong/Android.bp
++++ b/build/soong/Android.bp
+@@ -13,6 +13,7 @@ bootstrap_go_package {
+     ],
+     srcs: [
+         "generator/generator.go",
++        "generator/halium_noop.go",
+         "generator/variables.go",
+     ],
+     pluginFor: ["soong_build"],
+diff --git a/build/soong/generator/halium_noop.go b/build/soong/generator/halium_noop.go
+new file mode 100644
+index 00000000..40784864
+--- /dev/null
++++ b/build/soong/generator/halium_noop.go
+@@ -0,0 +1,26 @@
++// Halium: disable lineage_generator modules when the required kernel-build
++// soong config variables are absent. Halium uses prebuilt kernels and does not
++// run the LineageOS kernel-header generation steps.
++
++package generator
++
++import (
++	"android/soong/android"
++)
++
++func init() {
++	android.PreArchMutators(func(ctx android.RegisterMutatorsContext) {
++		ctx.BottomUp("halium_disable_lineage_generator", haliumDisableLineageGeneratorMutator)
++	})
++}
++
++func haliumDisableLineageGeneratorMutator(ctx android.BottomUpMutatorContext) {
++	if m, ok := ctx.Module().(*Module); ok {
++		lineageVars := ctx.Config().VendorConfig("lineageVarsPlugin")
++		// If the kernel-build variables are not configured, the cmd expansion
++		// will fail. Disable the module so GenerateAndroidBuildActions is skipped.
++		if !lineageVars.IsSet("KERNEL_BUILD_OUT_PREFIX") {
++			m.Disable()
++		}
++	}
++}
