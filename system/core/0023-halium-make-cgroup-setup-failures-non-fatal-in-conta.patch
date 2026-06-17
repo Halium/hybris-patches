@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 16 Jun 2026 14:56:02 +0300
+Subject: [PATCH] (halium) make cgroup setup failures non-fatal in container
+
+Containers may lack permission to mount certain cgroup controllers.
+Continue setup rather than aborting, and start services even without
+a per-process cgroup.
+
+Change-Id: I77b3ffaeb0325a5013d9f5b94c656bd880c1c1b3
+---
+ init/service.cpp                           | 30 ++++++++++++----------
+ libprocessgroup/setup/cgroup_map_write.cpp | 17 ++++++++----
+ 2 files changed, 28 insertions(+), 19 deletions(-)
+
+diff --git a/init/service.cpp b/init/service.cpp
+index 74bd76d603..29186e8c49 100644
+--- a/init/service.cpp
++++ b/init/service.cpp
+@@ -742,21 +742,23 @@ Result<void> Service::Start() {
+                          limit_percent_ != -1 || !limit_property_.empty();
+         errno = -createProcessGroup(uid(), pid_, use_memcg);
+         if (errno != 0) {
+-            Result<void> result = cgroups_activated.Write(kActivatingCgroupsFailed);
+-            if (!result.ok()) {
+-                return Error() << "Sending notification failed: " << result.error();
+-            }
+-            return Error() << "createProcessGroup(" << uid() << ", " << pid_ << ", " << use_memcg
+-                           << ") failed for service '" << name_ << "': " << strerror(errno);
+-        }
+-
+-        // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+-        // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+-        // NormalIoPriority profile has to be applied explicitly.
+-        SetProcessProfiles(uid(), pid_, {"NormalIoPriority"});
++            // Halium: the cgroup hierarchy may be incomplete in the container/early-boot
++            // environment (e.g. SetupCgroups failed to mount controllers). Treat this as
++            // non-fatal: log it and continue without a per-process cgroup so the service can
++            // still start. Falling through lets us write kCgroupsActivated below, which unblocks
++            // the forked child instead of making it LOG(FATAL) and reboot.
++            LOG(WARNING) << "createProcessGroup(" << uid() << ", " << pid_ << ", " << use_memcg
++                         << ") failed for service '" << name_ << "': " << strerror(errno)
++                         << "; continuing without cgroup";
++        } else {
++            // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
++            // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy,
++            // the NormalIoPriority profile has to be applied explicitly.
++            SetProcessProfiles(uid(), pid_, {"NormalIoPriority"});
+ 
+-        if (use_memcg) {
+-            ConfigureMemcg();
++            if (use_memcg) {
++                ConfigureMemcg();
++            }
+         }
+     }
+ 
+diff --git a/libprocessgroup/setup/cgroup_map_write.cpp b/libprocessgroup/setup/cgroup_map_write.cpp
+index a6f43f9a1b..b6a0a133c5 100644
+--- a/libprocessgroup/setup/cgroup_map_write.cpp
++++ b/libprocessgroup/setup/cgroup_map_write.cpp
+@@ -302,8 +302,11 @@ bool CgroupSetup() {
+         }
+ 
+         if (!SetupCgroup(descriptor)) {
+-            LOG(ERROR) << "Failed to setup " << name << " cgroup";
+-            return false;
++            // Halium: don't abort the whole cgroup setup if a single controller can't be
++            // mounted/configured (e.g. blkio mount denied with EPERM in a container).
++            // Log it and continue so the remaining controllers and the v2 sub-hierarchies
++            // still get set up.
++            LOG(ERROR) << "Failed to setup " << name << " cgroup; continuing";
+         }
+     }
+ 
+@@ -316,9 +319,13 @@ bool CgroupSetup() {
+                                                    : it->second.controller()->path();
+ 
+         LOG(INFO) << "Using system/app isolation under: " << cgroup_v2_root;
+-        if (!CreateV2SubHierarchy(cgroup_v2_root + "/apps", descriptors) ||
+-            !CreateV2SubHierarchy(cgroup_v2_root + "/system", descriptors)) {
+-            return false;
++        // Halium: keep these non-fatal too — a missing sub-hierarchy degrades cgroup
++        // accounting but should not abort boot.
++        if (!CreateV2SubHierarchy(cgroup_v2_root + "/apps", descriptors)) {
++            LOG(ERROR) << "Failed to create v2 'apps' sub-hierarchy; continuing";
++        }
++        if (!CreateV2SubHierarchy(cgroup_v2_root + "/system", descriptors)) {
++            LOG(ERROR) << "Failed to create v2 'system' sub-hierarchy; continuing";
+         }
+     }
+ 

@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 16 Jun 2026 14:55:52 +0300
+Subject: [PATCH] (halium) init.boringssl: skip conscrypt APEX self-tests
+
+Halium does not ship the conscrypt APEX, so the apexd.status=ready trigger
+never fires correctly. Skip those exec_start lines.
+
+Change-Id: I19ae5fc55620e8a66fa5e47c08cdb229a65f59ea
+---
+ rootdir/init.boringssl.zygote64.rc    | 6 ++++--
+ rootdir/init.boringssl.zygote64_32.rc | 9 +++++----
+ 2 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/rootdir/init.boringssl.zygote64.rc b/rootdir/init.boringssl.zygote64.rc
+index 3f49fea8b0..d9f5438251 100644
+--- a/rootdir/init.boringssl.zygote64.rc
++++ b/rootdir/init.boringssl.zygote64.rc
+@@ -1,4 +1,6 @@
++
+ on init && property:ro.product.cpu.abilist64=*
+     exec_start boringssl_self_test64
+-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+-    exec_start boringssl_self_test_apex64
++# Halium: we don't ship conscrypt apex
++#on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
++#    exec_start boringssl_self_test_apex64
+diff --git a/rootdir/init.boringssl.zygote64_32.rc b/rootdir/init.boringssl.zygote64_32.rc
+index c0be42dbb0..8dbba24fc3 100644
+--- a/rootdir/init.boringssl.zygote64_32.rc
++++ b/rootdir/init.boringssl.zygote64_32.rc
+@@ -2,7 +2,8 @@ on init && property:ro.product.cpu.abilist32=*
+     exec_start boringssl_self_test32
+ on init && property:ro.product.cpu.abilist64=*
+     exec_start boringssl_self_test64
+-on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
+-    exec_start boringssl_self_test_apex32
+-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+-    exec_start boringssl_self_test_apex64
++# Halium: we don't ship conscrypt apex
++#on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
++#    exec_start boringssl_self_test_apex32
++#on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
++#    exec_start boringssl_self_test_apex64
