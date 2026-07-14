@@ -27,7 +27,7 @@ index c3e9096..40dac5b 100644
      }
  
 +    // Halium: filesystem mount is handled outside container, always non-encrypted
-+    MountAllResult mount_fstab_result = FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
++    int mount_fstab_result = FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
 +
      if (queue_event) {
          /* queue_fs_event will queue event based on mount_fstab return code
