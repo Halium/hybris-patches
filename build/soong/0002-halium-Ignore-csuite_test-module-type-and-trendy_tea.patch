@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Wed, 15 Jul 2026 11:45:05 +0300
+Subject: [PATCH] (halium) Ignore csuite_test module type and trendy_team
+ modules
+
+test/app_compat/csuite is trimmed from the manifest, so the csuite_test
+module type it defines is unknown to soong; blueprint now skips unknown
+module types matching the ignore list. Team (trendy_team_*) modules come
+from platform_testing, which is trimmed as well; the all_teams singleton
+must not assume a package default_team resolves.
+
+Change-Id: I8cee5f51514f33149fb519510940145461a98a02
+---
+ android/all_teams.go        | 6 +++++-
+ halium_ignored_modules.list | 8 ++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/android/all_teams.go b/android/all_teams.go
+index 18a050f5d..144a05481 100644
+--- a/android/all_teams.go
++++ b/android/all_teams.go
+@@ -57,7 +57,11 @@ func (t *allTeamsSingleton) lookupDefaultTeam(bpFilePath string) (teamProperties
+ 	// return the Default_team listed in the package if is there.
+ 	if p, ok := t.packages[bpFilePath]; ok {
+ 		if defaultTeam := p.Default_team; defaultTeam != nil {
+-			return t.teams[*defaultTeam], true
++			// Halium: the team module may come from a trimmed repo, so
++			// report not-found instead of returning zero-value properties.
++			if tp, ok := t.teams[*defaultTeam]; ok {
++				return tp, true
++			}
+ 		}
+ 	}
+ 	// Strip a directory and go up.
+diff --git a/halium_ignored_modules.list b/halium_ignored_modules.list
+index 9ed1719ce..a52f98279 100644
+--- a/halium_ignored_modules.list
++++ b/halium_ignored_modules.list
+@@ -123,3 +123,11 @@ truth*
+ google-*
+ *.test
+ *.tests
++
++# --- Module types from soong plugins in trimmed repos ---
++# Unknown module types matching this list are skipped at parse time.
++csuite_test
++
++# --- Team metadata ---
++# team modules live in platform_testing, which is trimmed
++trendy_team_*
