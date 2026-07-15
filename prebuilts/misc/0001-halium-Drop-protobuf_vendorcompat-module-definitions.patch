@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Wed, 15 Jul 2026 12:01:51 +0300
+Subject: [PATCH] (halium) Drop protobuf_vendorcompat module definitions
+
+hardware/lineage/compat provides the same libprotobuf vendorcompat
+modules since lineage-23.2 commit 9e8811a, so the copies here make
+soong fail with duplicate module definitions.
+
+Change-Id: I759f1217280360f6df8cf62d8fe1f1b00ac00310
+---
+ protobuf_vendorcompat/Android.bp | 100 -------------------------------
+ 1 file changed, 100 deletions(-)
+ delete mode 100644 protobuf_vendorcompat/Android.bp
+
+diff --git a/protobuf_vendorcompat/Android.bp b/protobuf_vendorcompat/Android.bp
+deleted file mode 100644
+index f72230f..0000000
+--- a/protobuf_vendorcompat/Android.bp
++++ /dev/null
+@@ -1,100 +0,0 @@
+-package {
+-    default_applicable_licenses: ["prebuilts_misc_protobuf_vendorcompat_license"],
+-}
+-
+-// See: http://go/android-license-faq
+-license {
+-    name: "prebuilts_misc_protobuf_vendorcompat_license",
+-    license_kinds: ["SPDX-license-identifier-BSD"],
+-    license_text: ["LICENSE"],
+-}
+-
+-// Workaround for neural networks HAL on barbet
+-cc_prebuilt_library_shared {
+-    name: "libprotobuf-cpp-full-3.9.1-vendorcompat",
+-    stem: "libprotobuf-cpp-full-3.9.1",
+-    ignore_max_page_size: true,
+-    vendor: true,
+-    target: {
+-        android_arm64: {
+-            srcs: ["arm64/libprotobuf-cpp-full-3.9.1.so"],
+-        },
+-        android_arm: {
+-            srcs: ["arm/libprotobuf-cpp-full-3.9.1.so"],
+-        },
+-    },
+-
+-    shared_libs: [
+-        "libc++",
+-        "libc",
+-        "libdl",
+-        "liblog",
+-        "libm",
+-        "libz",
+-    ],
+-}
+-
+-// Workaround for Qualcomm prebuilts used by partners.
+-cc_prebuilt_library_shared {
+-    name: "libprotobuf-cpp-lite-3.9.1-vendorcompat",
+-    stem: "libprotobuf-cpp-lite-3.9.1",
+-    ignore_max_page_size: true,
+-    vendor: true,
+-    target: {
+-        android_arm64: {
+-            srcs: ["arm64/libprotobuf-cpp-lite-3.9.1.so"],
+-        },
+-        android_arm: {
+-            srcs: ["arm/libprotobuf-cpp-lite-3.9.1.so"],
+-        },
+-    },
+-
+-    shared_libs: [
+-        "libc++",
+-        "libc",
+-        "libdl",
+-        "liblog",
+-        "libm",
+-        "libz",
+-    ],
+-}
+-
+-cc_prebuilt_library_shared {
+-    name: "libprotobuf-cpp-full-21.12-vendorcompat",
+-    stem: "libprotobuf-cpp-full-21.12",
+-    vendor: true,
+-    target: {
+-        android_arm: {
+-            srcs: ["arm/libprotobuf-cpp-full-21.12.so"],
+-        },
+-    },
+-
+-    shared_libs: [
+-        "libc++",
+-        "libc",
+-        "libdl",
+-        "liblog",
+-        "libm",
+-        "libz",
+-    ],
+-}
+-
+-cc_prebuilt_library_shared {
+-    name: "libprotobuf-cpp-lite-21.12-vendorcompat",
+-    stem: "libprotobuf-cpp-lite-21.12",
+-    vendor: true,
+-    target: {
+-        android_arm: {
+-            srcs: ["arm/libprotobuf-cpp-lite-21.12.so"],
+-        },
+-    },
+-
+-    shared_libs: [
+-        "libc++",
+-        "libc",
+-        "libdl",
+-        "liblog",
+-        "libm",
+-        "libz",
+-    ],
+-}
