@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Sat, 25 Jul 2026 13:47:09 +0300
+Subject: [PATCH] (halium) init: skip fstab read so mount_all triggers
+ nonencrypted
+
+do_mount_all reads the fstab and early-returns before queue_fs_event.
+The Halium boot calls `mount_all /dev/null`, whose empty fstab fails to
+parse, so nonencrypted never fires and class_start main / late_start
+(the telephony stack) never run. fs_mgr_mount_all is already disabled
+for Halium, so the read is pointless; drop it.
+
+Change-Id: I98098ee143c82537fbb52887954eaba3d44f7f72
+---
+ init/builtins.cpp | 15 +++------------
+ 1 file changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/init/builtins.cpp b/init/builtins.cpp
+index 6ebccab8f..f1c1deae8 100644
+--- a/init/builtins.cpp
++++ b/init/builtins.cpp
+@@ -637,18 +637,9 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
+     std::string prop_name = "ro.boottime.init.mount_all."s + prop_post_fix;
+     android::base::Timer t;
+ 
+-    Fstab fstab;
+-    if (mount_all->fstab_path.empty()) {
+-        if (!ReadDefaultFstab(&fstab)) {
+-            return Error() << "Could not read default fstab";
+-        }
+-    } else {
+-        if (!ReadFstabFromFile(mount_all->fstab_path, &fstab)) {
+-            return Error() << "Could not read fstab";
+-        }
+-    }
+-
+-    /*auto mount_fstab_result = fs_mgr_mount_all(&fstab, mount_all->mode);*/
++    // Halium: mounts are handled outside the container (fs_mgr_mount_all is
++    // disabled below) and `mount_all /dev/null` has no fstab to read. Skip the
++    // read so we still reach queue_fs_event to fire the `nonencrypted` trigger.
+     SetProperty(prop_name, std::to_string(t.duration().count()));
+ 
+     if (mount_all->import_rc) {
