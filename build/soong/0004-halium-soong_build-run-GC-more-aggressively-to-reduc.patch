@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 18 Aug 2026 11:58:21 +0300
+Subject: [PATCH] (halium) soong_build: run GC more aggressively to reduce peak
+ memory
+
+Analysis of the full module graph peaks at ~2x the live heap with the
+Go default GOGC=100, which OOMs smaller build machines. Default
+soong_build to GOGC=40, and forward GOGC/GOMEMLIMIT from the user's
+environment (the bootstrap ninja env is otherwise scrubbed to TOP and
+PATH) so the default can be overridden.
+
+Change-Id: Iebb8aca2e701dc8040bf215f238417ae15f1597f
+---
+ cmd/soong_build/main.go | 13 +++++++++++++
+ ui/build/soong.go       |  8 ++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/cmd/soong_build/main.go b/cmd/soong_build/main.go
+index 254dd25cc..69d6423ed 100644
+--- a/cmd/soong_build/main.go
++++ b/cmd/soong_build/main.go
+@@ -22,6 +22,7 @@ import (
+ 	"os"
+ 	"path/filepath"
+ 	"runtime"
++	"runtime/debug"
+ 	"strings"
+ 	"time"
+ 
+@@ -308,9 +309,21 @@ func parseAvailableEnv() map[string]string {
+ 	return result
+ }
+ 
++// setDefaultGCPercent makes the GC run more aggressively than the Go default
++// (GOGC=100, which lets the heap peak at ~2x the live module graph) so
++// analysis fits smaller machines and shared CI hosts, at some CPU cost.
++// GOGC in the environment still wins.
++func setDefaultGCPercent() {
++	if os.Getenv("GOGC") == "" {
++		debug.SetGCPercent(40)
++	}
++}
++
+ func main() {
+ 	flag.Parse()
+ 
++	setDefaultGCPercent()
++
+ 	if cmdlineArgs.Memprofile == "" {
+ 		// Go enables memory profile collection automatically if any references
+ 		// are linked in to the binary.
+diff --git a/ui/build/soong.go b/ui/build/soong.go
+index c9b303c5b..243d7afe0 100644
+--- a/ui/build/soong.go
++++ b/ui/build/soong.go
+@@ -699,6 +699,14 @@ func runSoong(ctx Context, config Config, enforceNoSoongOutput bool) {
+ 			ninjaPath, _ := config.Environment().Get("PATH")
+ 			ninjaEnv.Set("PATH", ninjaPath)
+ 
++			// Allow tuning soong_build's Go GC from the user's shell to
++			// bound its peak memory (default GOGC=100 peaks at ~2x live heap).
++			for _, k := range []string{"GOGC", "GOMEMLIMIT"} {
++				if v, ok := config.Environment().Get(k); ok {
++					ninjaEnv.Set(k, v)
++				}
++			}
++
+ 			cmd.Environment = &ninjaEnv
+ 			cmd.Sandbox = soongSandbox
+ 			cmd.RunAndStreamOrFatal()
