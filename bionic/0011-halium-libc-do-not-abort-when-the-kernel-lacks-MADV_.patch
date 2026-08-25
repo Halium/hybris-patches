@@ -1,0 +1,80 @@
+From 7a1a193c0b255f65ad3f509d63a0bc44ad33fa2f Mon Sep 17 00:00:00 2001
+From: Herman van Hazendonk <Github.com@herrie.org>
+Date: Tue, 25 Aug 2026 06:18:55 +0200
+Subject: (halium) libc: do not abort when the kernel lacks MADV_WIPEONFORK
+
+MADV_WIPEONFORK landed in Linux 4.14. Halium runs on stock vendor kernels
+older than that - the Pixel 3a is on 4.9 - where madvise() returns EINVAL.
+Upstream makes that async_safe_fatal, so every dynamically linked process
+aborts during libc startup. That includes /init, which means the Android
+container exits immediately (lxc reports "ended on error (127)") and no
+property service ever comes up, so the whole boot fails with no useful
+message beyond a getentropy warning.
+
+Treat the failure as "kernel will not zero this mapping for us" and restore
+the pid-based fork detection bionic used up to Android 14, so fork children
+still reseed rather than replaying the parent's keystream.
+
+Change-Id: Ib40afa98db9169e8c1c0f33a56428fdd71941788
+---
+ .../android/include/arc4random.h              | 29 +++++++++++++++++--
+ 1 file changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/libc/upstream-openbsd/android/include/arc4random.h b/libc/upstream-openbsd/android/include/arc4random.h
+index 1940398..e2b4a26 100644
+--- a/libc/upstream-openbsd/android/include/arc4random.h
++++ b/libc/upstream-openbsd/android/include/arc4random.h
+@@ -19,8 +19,11 @@
+  */
+ 
+ #include <pthread.h>
++#include <stdbool.h>
++#include <string.h>
+ #include <sys/mman.h>
+ #include <sys/prctl.h>
++#include <unistd.h>
+ 
+ #include <async_safe/log.h>
+ 
+@@ -41,8 +44,24 @@ static inline void _getentropy_fail(void) {
+   async_safe_fatal("getentropy failed: %m");
+ }
+ 
++// (halium) Whether the kernel honoured MADV_WIPEONFORK in _rs_allocate(). When
++// it did, the mapping is zeroed for us in fork children and no detection is
++// needed. When it did not, we detect forks ourselves - see below.
++static bool _rs_wipeonfork = true;
++
+ static inline void _rs_forkdetect(void) {
+-  // Not needed thanks to the MADV_WIPEONFORK below.
++  // Not needed when MADV_WIPEONFORK took: the kernel zeroes the mapping.
++  if (_rs_wipeonfork) return;
++
++  // (halium) Otherwise fall back to the pid check bionic itself used up to
++  // Android 14, so a fork child does not keep replaying the parent's
++  // keystream. Zeroing rs makes the next _rs_stir() reseed from getentropy.
++  static pid_t _rs_pid = 0;
++  pid_t pid = getpid();
++  if (_rs_pid != pid) {
++    _rs_pid = pid;
++    if (rs != NULL) memset(rs, 0, sizeof(*rs));
++  }
+ }
+ 
+ static inline int _rs_allocate(struct _rs** rsp, struct _rsx** rsxp) {
+@@ -60,8 +79,14 @@ static inline int _rs_allocate(struct _rs** rsp, struct _rsx** rsxp) {
+   }
+ 
+   // Equivalent to OpenBSD's minherit(MAP_INHERIT_ZERO).
++  //
++  // (halium) Not fatal when the kernel does not know the advice. MADV_WIPEONFORK
++  // landed in Linux 4.14 and Halium runs on vendor kernels older than that -
++  // sargo is on 4.9 - where madvise() returns EINVAL. Aborting here kills every
++  // dynamically linked process on such a device at startup, /init among them, so
++  // the Android container never comes up at all. Fall back to _rs_forkdetect().
+   if (madvise(p, size, MADV_WIPEONFORK) == -1) {
+-    async_safe_fatal("arc4random data MADV_WIPEONFORK failed: %m");
++    _rs_wipeonfork = false;
+   }
+ 
+   // Give the allocation a name to make tombstones more intelligible.
