@@ -1,0 +1,35 @@
+From 6d2b52625278b569e69c9f21fcfe44991a42e4df Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Thu, 14 May 2026 12:03:21 +0300
+Subject: [PATCH] (halium) cameraservice: do not deny camera when proxy
+ unavailable
+
+CameraServiceProxyWrapper::isCameraDisabled returns true when the
+CameraServiceProxy binder is not available, which causes connectDevice
+to fail with "Camera disabled by device policy" in Halium where the
+Android device policy service is not running.
+
+Return false (not disabled) when the proxy is unavailable.
+
+Change-Id: I9a3b5c7d8e1f2a4b6c8d0e2f4a6b8c0d2e4f6a8
+---
+ .../libcameraservice/utils/CameraServiceProxyWrapper.cpp       | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/services/camera/libcameraservice/utils/CameraServiceProxyWrapper.cpp b/services/camera/libcameraservice/utils/CameraServiceProxyWrapper.cpp
+index dae5eea..f48640d 100644
+--- a/services/camera/libcameraservice/utils/CameraServiceProxyWrapper.cpp
++++ b/services/camera/libcameraservice/utils/CameraServiceProxyWrapper.cpp
+@@ -264,7 +264,8 @@ void CameraServiceProxyWrapper::logClose(const String8& id, int32_t latencyMs) {
+ 
+ bool CameraServiceProxyWrapper::isCameraDisabled(int userId) {
+     sp<ICameraServiceProxy> proxyBinder = getCameraServiceProxy();
+-    if (proxyBinder == nullptr) return true;
++    // Halium: CameraServiceProxy is not available; assume camera is not disabled.
++    if (proxyBinder == nullptr) return false;
+     bool ret = false;
+     auto status = proxyBinder->isCameraDisabled(userId, &ret);
+     if (!status.isOk()) {
+-- 
+2.53.0
+
