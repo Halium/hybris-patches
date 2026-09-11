@@ -1,0 +1,49 @@
+From 55e2e7b48a7fe2645daa2da3c6e697c5bb0793e4 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Sat, 19 Sep 2026 00:34:56 +0300
+Subject: [PATCH] (halium) libcutils: fall back to /dev/ashmem when the boot-id
+ node is absent
+
+ueventd creates /dev/ashmem<boot_id> only in the container's own /dev, so
+libhybris consumers on the host fail ashmem_create_region.
+
+On the host the boot_id read itself can also be denied by apparmor, which
+left the path empty and failed before the existing /dev/ashmem fallback in
+__ashmem_open_locked could run. Use the plain device in that case too.
+
+Change-Id: I75ef3ca5f37e2afeadf9b05648f4f6be7ee3a411
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ libcutils/ashmem-dev.cpp | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/libcutils/ashmem-dev.cpp b/libcutils/ashmem-dev.cpp
+index 56d6875..2ec7b3f 100644
+--- a/libcutils/ashmem-dev.cpp
++++ b/libcutils/ashmem-dev.cpp
+@@ -194,11 +194,20 @@ static std::string get_ashmem_device_path() {
+     std::string boot_id;
+     if (!android::base::ReadFileToString(boot_id_path, &boot_id)) {
+         ALOGE("Failed to read %s: %s.\n", boot_id_path.c_str(), strerror(errno));
+-        return "";
++        return "/dev/ashmem";
+     };
+     boot_id = android::base::Trim(boot_id);
+ 
+-    return "/dev/ashmem" + boot_id;
++    // Android's ueventd duplicates /dev/ashmem as /dev/ashmem<boot_id>. Under
++    // Halium it only populates the container's own /dev, so processes using
++    // libhybris on the host never see that node. Fall back to the plain device
++    // the host creates, which is the same character device.
++    const std::string boot_id_device_path = "/dev/ashmem" + boot_id;
++    if (TEMP_FAILURE_RETRY(access(boot_id_device_path.c_str(), F_OK)) == -1) {
++        return "/dev/ashmem";
++    }
++
++    return boot_id_device_path;
+ }
+ 
+ /* logistics of getting file descriptor for ashmem */
+-- 
+2.53.0
+
