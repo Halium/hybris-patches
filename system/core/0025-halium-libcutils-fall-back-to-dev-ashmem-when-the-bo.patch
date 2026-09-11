@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Fri, 11 Sep 2026 18:37:02 +0300
+Subject: [PATCH] (halium) libcutils: fall back to /dev/ashmem when the boot-id
+ node is absent
+
+ueventd creates /dev/ashmem<boot_id> only in the container's own /dev, so
+libhybris consumers on the host fail ashmem_create_region. That breaks
+libfmq, and with it the Android 16 AIDL codec2 HAL.
+
+Change-Id: I75ef3ca5f37e2afeadf9b05648f4f6be7ee3a411
+---
+ libcutils/ashmem-dev.cpp | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/libcutils/ashmem-dev.cpp b/libcutils/ashmem-dev.cpp
+index 11aedb103..be894cfdd 100644
+--- a/libcutils/ashmem-dev.cpp
++++ b/libcutils/ashmem-dev.cpp
+@@ -121,7 +121,16 @@ static std::string get_ashmem_device_path() {
+     }
+     boot_id = android::base::Trim(boot_id);
+ 
+-    return "/dev/ashmem" + boot_id;
++    // Android's ueventd duplicates /dev/ashmem as /dev/ashmem<boot_id>. Under
++    // Halium it only populates the container's own /dev, so processes using
++    // libhybris on the host never see that node. Fall back to the plain device
++    // the host creates, which is the same character device.
++    const std::string boot_id_device_path = "/dev/ashmem" + boot_id;
++    if (TEMP_FAILURE_RETRY(access(boot_id_device_path.c_str(), F_OK)) == -1) {
++        return "/dev/ashmem";
++    }
++
++    return boot_id_device_path;
+ }
+ 
+ static bool __init_ashmem_rdev() {
