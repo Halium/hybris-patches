@@ -2,28 +2,29 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Steffen Deusch <steffen@deusch.me>
 Date: Fri, 3 Apr 2026 21:14:07 +0000
 Subject: [PATCH] (halium) skip SELinux context check for decompressed APEXes
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-When AppArmor is the active LSM (not SELinux), getfilecon() fails with
-ENODATA, causing OpenAndValidateDecompressedApex to return an error.
-This silently prevents all CAPEX decompression — apexd reports
-"activated" but no compressed APEXes are mounted.
+apexd checks the SELinux label of a freshly decompressed APEX. On Halium
+this always fails: restorecon is stubbed out, and the container runs
+either under AppArmor or under SELinux permissive with no policy loaded.
+getfilecon() then returns ENODATA, the decompressed file is discarded,
+and the compressed APEX silently stays inactive while apexd still
+reports "ready".
 
-Skip the SELinux context validation when SELinux is not enabled, since
-the context check is meaningless without SELinux as the kernel LSM.
+is_selinux_enabled() alone is not enough as a guard: libselinux returns
+true whenever selinuxfs is mounted, which it is in the container even
+without a policy. Only run the check when SELinux is enforcing, where a
+wrong label would actually matter.
 
 Change-Id: I7b1c1116b60a2ccea11367333a649c11c7f340d4
 ---
- apexd/apexd.cpp | 14 ++++++++------
- 1 file changed, 8 insertions(+), 6 deletions(-)
+ apexd/apexd.cpp | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
 
 diff --git a/apexd/apexd.cpp b/apexd/apexd.cpp
-index 2eefe1759..1c959da52 100644
+index 2eefe175..181ef771 100644
 --- a/apexd/apexd.cpp
 +++ b/apexd/apexd.cpp
-@@ -2462,12 +2462,14 @@ Result<ApexFile> OpenAndValidateDecompressedApex(const ApexFile& capex,
+@@ -2462,12 +2462,17 @@ Result<ApexFile> OpenAndValidateDecompressedApex(const ApexFile& capex,
    if (!result.ok()) {
      return result.error();
    }
@@ -33,7 +34,10 @@ index 2eefe1759..1c959da52 100644
 -  }
 -  if (!StartsWith(*ctx, gConfig->active_apex_selinux_ctx)) {
 -    return Error() << apex_path << " has wrong SELinux context " << *ctx;
-+  if (is_selinux_enabled()) {
++  // Only check the label when SELinux can enforce it. Halium runs the
++  // container permissive without a policy, so the decompressed file has
++  // no label and getfilecon() fails with ENODATA.
++  if (is_selinux_enabled() && security_getenforce() == 1) {
 +    auto ctx = GetfileconPath(apex_path);
 +    if (!ctx.ok()) {
 +      return ctx.error();
