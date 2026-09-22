@@ -1,0 +1,23 @@
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index 2b53d883ea..8ad526b776 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -1145,12 +1145,12 @@ on boot
+     chown system system /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+     chmod 0660 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+ 
+-    chown system system /sys/class/leds/vibrator/trigger
+-    chown system system /sys/class/leds/vibrator/activate
+-    chown system system /sys/class/leds/vibrator/brightness
+-    chown system system /sys/class/leds/vibrator/duration
+-    chown system system /sys/class/leds/vibrator/state
+-    chown system system /sys/class/timed_output/vibrator/enable
++    chown system input /sys/class/leds/vibrator/trigger
++    chown system input /sys/class/leds/vibrator/activate
++    chown system input /sys/class/leds/vibrator/brightness
++    chown system input /sys/class/leds/vibrator/duration
++    chown system input /sys/class/leds/vibrator/state
++    chown system input /sys/class/timed_output/vibrator/enable
+     chown system system /sys/class/leds/keyboard-backlight/brightness
+     chown system system /sys/class/leds/lcd-backlight/brightness
+     chown system system /sys/class/leds/button-backlight/brightness
