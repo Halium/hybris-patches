@@ -1,0 +1,59 @@
+From 07f97f013d5886bd2ba498797b495c3fefe07565 Mon Sep 17 00:00:00 2001
+From: berbascum <berbascum@ticv.cat>
+Date: Tue, 3 Mar 2026 19:23:15 +0100
+Subject: [PATCH] (halium11) libaudioclient: Fix infinite loop in get_audio_flinger()
+
+Problem:
+In Halium environments, AudioFlinger is replaced by CameraRecordService
+for audio recording.
+However, get_audio_flinger() still attempts to contact AudioFlinger
+using an infinite blocking loop:
+
+    do {
+        binder = sm->getService(String16("media.audio_flinger"));
+        if (binder != 0)
+            break;
+        ALOGW("AudioFlinger not published, waiting...");
+        usleep(500000);
+    } while (true);
+
+When AudioFlinger is not started, getService() never succeeds,
+and the function remains trapped in the infinite while(true=) loop,
+blocking the audio thread indefinitely.
+
+Impact:
+Camera video recording with audio in hardware mode might fail
+on halium-11 for some devices.
+
+Solution:
+Check for CameraRecordService. If running, skip audioflinger wait loop.
+
+- Tested on Xiaomi POCO X3 Pro (vayu) running Droidian-101/Halium-11.
+- Camera app: new droidian-camera from 102 (qt6 hybris-compat)
+  https://github.com/droidian/droidian-camera/tree/feature/next/hybris-compat
+- Camera video recording with audio in hw mode now works.
+
+Signed-off-by: berbascum <berbascum@ticv.cat>
+---
+ media/libaudioclient/AudioSystem.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/media/libaudioclient/AudioSystem.cpp b/media/libaudioclient/AudioSystem.cpp
+index d84c49e22a..74a68fec46 100644
+--- a/media/libaudioclient/AudioSystem.cpp
++++ b/media/libaudioclient/AudioSystem.cpp
+@@ -66,6 +66,11 @@ const sp<IAudioFlinger> AudioSystem::get_audio_flinger()
+         if (gAudioFlinger == 0) {
+             sp<IServiceManager> sm = defaultServiceManager();
+             sp<IBinder> binder;
++	    // Check if running in CameraRecordService mode (Halium)
++            if (sm->checkService(String16(CameraRecordService::exported_service_name())) != 0) {
++                ALOGW("CameraRecordService mode: Skipping AudioFlinger");
++                return NULL;
++            }
+             do {
+                 binder = sm->getService(String16("media.audio_flinger"));
+                 if (binder != 0)
+---
+2.50.0
+
