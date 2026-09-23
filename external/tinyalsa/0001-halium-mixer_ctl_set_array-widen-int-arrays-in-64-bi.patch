@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheKit <thekit@disroot.org>
+Date: Tue, 22 Sep 2026 22:41:21 +0300
+Subject: [PATCH] (halium) mixer_ctl_set_array: widen int arrays in 64-bit mode
+
+Some 64-bit audio HALs carry 32-bit UAPI assumptions and pass int arrays
+for INTEGER controls, which the memcpy misreads as longs. Detect this
+and widen the values.
+
+Fixes in-call volume on Pixel 3a, where the stock HAL's "Voice Rx Gain"
+and "Voice Rx Device Mute" writes failed with -EINVAL.
+---
+ mixer.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/mixer.c b/mixer.c
+index f3fdb62..32bea26 100644
+--- a/mixer.c
++++ b/mixer.c
+@@ -550,6 +550,26 @@ int mixer_ctl_set_array(struct mixer_ctl *ctl, const void *array, size_t count)
+         return -EINVAL;
+     }
+ 
++#ifdef __LP64__
++    /* Halium: some 64-bit audio HALs assume the 32-bit UAPI and pass int
++     * arrays for INTEGER controls, e.g. {volume, vsid, ramp} for "Voice Rx Gain".
++     * Detect that when the first long is not a sign-extended int and widen.
++     * This assumes callers never pass values outside int range, which the
++     * 32-bit UAPI these HALs were written against would have truncated anyway. */
++    if (ctl->info->type == SNDRV_CTL_ELEM_TYPE_INTEGER && count > 1) {
++        const int32_t *src = array;
++        long first;
++
++        memcpy(&first, array, sizeof(first));
++        if (first != (long)src[0]) {
++            for (size_t i = 0; i < count; i++)
++                ev.value.integer.value[i] = src[i];
++
++            return ioctl(ctl->mixer->fd, SNDRV_CTL_IOCTL_ELEM_WRITE, &ev);
++        }
++    }
++#endif
++
+     memcpy(dest, array, size * count);
+ 
+     return ioctl(ctl->mixer->fd, SNDRV_CTL_IOCTL_ELEM_WRITE, &ev);
+-- 
+2.55.0
+
