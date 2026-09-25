@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: jukfiuune <108091130+jukfiuune@users.noreply.github.com>
+Date: Fri, 25 Sep 2026 10:49:48 +0300
+Subject: [PATCH] (halium) init.rc: do not start bpfloader
+
+bpfloader (netbpfload) ships in the Tethering APEX. Inside the Halium
+container it aborts, and the APEX declares the service with
+reboot_on_failure, so starting it reboots the container seconds into
+boot. Stock Halium never hit this because it shipped no Tethering APEX,
+so exec_start found no bpfloader service. The APEX is needed for mobile
+data on recent Qualcomm devices (nicmd and qms link against a library
+inside it), so it is being restored in vendor/halium/config.
+
+Halium runs no netd and no system_server, so nothing uses the BPF
+programs bpfloader would load. bpf.progs_loaded is not waited on
+anywhere else. Don't start it, as odsign is already not started.
+---
+ rootdir/init.rc | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index af6a41a..3eabfb1 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -1161,7 +1161,10 @@ on load-bpf-programs
+     # NOTE: Still requires CAP_SYSLOG and sepolicy allow rules to read /proc/kallsyms
+     write /proc/sys/kernel/kptr_restrict 1
+ 
+-    exec_start bpfloader
++    # Halium: do not start bpfloader. It aborts inside the container, and the
++    # Tethering APEX declares it with reboot_on_failure, which would reboot
++    # the container. Nothing in Halium uses the programs it loads.
++    # exec_start bpfloader
+ 
+     # Restore kallsyms protection after bpf programs have been loaded.
+     write /proc/sys/kernel/kptr_restrict 2
+-- 
+2.55.0
+
