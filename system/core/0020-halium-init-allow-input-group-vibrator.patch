@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Adam Pigg <adam@piggz.co.uk>
+Date: Tue, 22 Sep 2026 18:03:42 +0100
+Subject: [PATCH] (halium) init: allow input group access to vibrator
+
+---
 diff --git a/rootdir/init.rc b/rootdir/init.rc
 index 2b53d883ea..8ad526b776 100644
 --- a/rootdir/init.rc
